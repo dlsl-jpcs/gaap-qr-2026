@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-oswald: var(--font-oswald), ui-sans-serif, system-ui, sans-serif;
+  --font-comic: var(--font-comic), "Comic Sans MS", "Comic Sans", cursive;
+}
+
+@layer base {
+  body {
+    @apply bg-[#f0eee4] text-[#111111] antialiased;
+  }
+}
+
+@layer components {
+  .grunge-card {
+    @apply bg-[#faf9f6] border-[6px] border-[#111111] shadow-[12px_12px_0px_rgba(17,17,17,1)] relative overflow-hidden;
+  }
+  
+  .grunge-input {
+    @apply w-full bg-transparent border-b-[6px] border-[#111111] px-2 py-3 text-[#111111] font-oswald text-2xl tracking-wide placeholder-neutral-400 focus:outline-none focus:border-[#d92323] transition-colors rounded-none;
+  }
+
+  .grunge-btn {
+    @apply w-full mt-8 py-5 bg-[#111111] text-[#f0eee4] font-oswald text-3xl tracking-widest uppercase border-[6px] border-[#111111] hover:bg-[#d92323] hover:text-[#111111] transition-all duration-300 shadow-[8px_8px_0px_rgba(217,35,35,0.3)] hover:shadow-[12px_12px_0px_rgba(17,17,17,1)] disabled:opacity-50 cursor-pointer;
+  }
+}
