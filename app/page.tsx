@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SuccessCard from '@/components/SuccessCard';
 
 export default function Home() {
-  const [name, setName] = useState('');
   const [studentNumber, setStudentNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -12,8 +11,8 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !studentNumber) {
-       setError("PLEASE FILL OUT ALL FIELDS.");
+    if (!studentNumber) {
+       setError("PLEASE ENTER YOUR STUDENT NUMBER.");
        return;
     }
     setLoading(true);
@@ -23,7 +22,7 @@ export default function Home() {
       const res = await fetch('/api/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, studentNumber })
+        body: JSON.stringify({ studentNumber })
       });
       const data = await res.json();
       
@@ -64,18 +63,6 @@ export default function Home() {
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block font-oswald text-xl uppercase tracking-widest text-[#111] mb-1">Full Name</label>
-                <input 
-                  type="text" 
-                  className="grunge-input"
-                  placeholder="JOHN DOE"
-                  value={name}
-                  onChange={e => setName(e.target.value.toUpperCase())}
-                  disabled={loading}
-                />
-              </div>
-              
               <div>
                 <label className="block font-oswald text-xl uppercase tracking-widest text-[#111] mb-1">Student Number</label>
                 <input 

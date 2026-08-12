@@ -1,22 +1,37 @@
 import { NextResponse } from 'next/server';
 import { assignStudent } from '@/lib/db';
+import { fetchStudentInfo, deriveDisplayName } from '@/lib/api';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, studentNumber } = body;
+    const { studentNumber } = body;
 
-    if (!name || !studentNumber) {
-      return NextResponse.json({ success: false, message: "Name and Student Number are required." }, { status: 400 });
+    if (!studentNumber) {
+      return NextResponse.json({ success: false, message: "Student Number is required." }, { status: 400 });
     }
     
-    if (isNaN(Number(studentNumber))) {
+    // Convert to string and trim
+    const formattedStudentNumber = String(studentNumber).trim();
+
+    if (isNaN(Number(formattedStudentNumber))) {
        return NextResponse.json({ success: false, message: "Student Number must be a valid number." }, { status: 400 });
     }
 
-    const result = assignStudent(name.trim(), String(studentNumber).trim());
+    // Fetch from DLSL API
+    const info = await fetchStudentInfo(formattedStudentNumber);
+
+    if (!info) {
+      return NextResponse.json({ success: false, message: "Student not found in DLSL database." }, { status: 404 });
+    }
+
+    // Determine display name
+    const finalName = info.name || deriveDisplayName(info.email);
+
+    // Assign to group
+    const result = assignStudent(finalName, formattedStudentNumber);
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json({ success: false, message: "Invalid request format." }, { status: 400 });
+    return NextResponse.json({ success: false, message: "Invalid request format or server error." }, { status: 400 });
   }
 }

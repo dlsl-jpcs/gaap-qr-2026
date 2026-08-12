@@ -1,0 +1,76 @@
+import axios from 'axios';
+import https from 'https';
+
+// The DLSL portal uses an invalid/expired SSL certificate, 
+// so this agent bypasses the TLS verification.
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+  secureProtocol: 'TLS_method'
+});
+
+export async function fetchStudentInfo(studentId: string) {
+  // If no env variables are set, these defaults are used
+  const apiUrl = process.env.PORTAL_BASE_URL || 'https://portal.dlsl.edu.ph';
+  const apiPath = process.env.PORTAL_HELPER_PATH || '/registration/event/helper.php';
+  const regKey = process.env.REG_KEY ? process.env.REG_KEY.replace(/"/g, '') : '20250515U60HB0';
+
+  const formData = new URLSearchParams({
+    action: 'registration_tapregister',
+    regkey: regKey,
+    card_tag: studentId
+  });
+
+  const headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'User-Agent': 'dlsl-student-api/1.0',
+    'Accept': 'application/json, text/plain, */*'
+  };
+
+  try {
+    const response = await axios({
+      method: 'POST',
+      url: apiUrl + apiPath,
+      data: formData.toString(),
+      headers,
+      httpsAgent,
+      timeout: 15000,
+      validateStatus: status => status < 500
+    });
+
+    const data = response.data;
+
+    // Check if the student is actually registered
+    if (!data.email_address || data.email_address === "") {
+      return null;
+    }
+
+    // Return the extracted student data
+    return {
+      email: data.email_address.toLowerCase(),
+      name: data.name || undefined,
+      photo: data.photo || undefined,
+    };
+
+  } catch (error: any) {
+    console.error('DLSL API request failed:', error.message);
+    throw error;
+  }
+}
+
+// === Helper Functions ===
+
+function capitalize(word: string) {
+  if (!word) return "";
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function prettifyNamePart(part: string) {
+  return (part || "").split("-").map(capitalize).join("-");
+}
+
+export function deriveDisplayName(email: string) {
+  const [local] = email.split("@");
+  const nameParts = local.split("_");
+  const formattedParts = nameParts.map((part) => prettifyNamePart(part));
+  return formattedParts.filter(Boolean).join(" ");
+}
