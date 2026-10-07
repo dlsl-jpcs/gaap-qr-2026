@@ -252,11 +252,6 @@ export default function Home() {
                     : setStudentNumber(e.target.value)}
                   disabled={modeLoading || registrationMode === null || (loading && registrationMode !== 'nfc')}
                 />
-                {registrationMode === 'nfc' && !modeLoading && (
-                  <p className="mt-2 text-center font-oswald text-sm uppercase tracking-wider text-neutral-600">
-                    Waiting for card input — keep this page focused and tap your card. Reader output must be the UID in hexadecimal, without a prefix or separators.
-                  </p>
-                )}
               </div>
               
               {error && (
