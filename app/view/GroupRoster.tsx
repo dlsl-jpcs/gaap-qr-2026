@@ -88,10 +88,12 @@ export default function GroupRoster({ group, page, onPageCount }: {
         )}
       </div>
 
-      <footer className={styles.groupFooter}>
-        <span>{group.members.length ? 'Names ' + (offset + 1) + '–' + (offset + members.length) + ' of ' + group.members.length : 'Registration is open'}</span>
-        {pages.length > 1 && <span className={styles.rosterPages}>{pages.map((_, index) => <i key={index} data-active={index === visiblePage} />)}</span>}
-      </footer>
+      {group.members.length > 0 && (
+        <footer className={styles.groupFooter}>
+          <span>{'Names ' + (offset + 1) + '–' + (offset + members.length) + ' of ' + group.members.length}</span>
+          {pages.length > 1 && <span className={styles.rosterPages}>{pages.map((_, index) => <i key={index} data-active={index === visiblePage} />)}</span>}
+        </footer>
+      )}
     </article>
   );
 }

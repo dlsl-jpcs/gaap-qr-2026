@@ -47,7 +47,6 @@
 .boardMessage h2 { font-family: var(--font-oswald), Impact, sans-serif; font-size: clamp(32px, 3vw, 80px); }
 .boardMessage p { color: #525252; font-size: clamp(18px, 1.25vw, 36px); font-weight: 700; }
 .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
-.instruction { color: #525252; font-size: clamp(13px, 1vw, 32px); font-weight: 700; font-style: italic; }
 .banks { display: flex; align-items: center; gap: clamp(6px, .4vw, 14px); }
 .bank { position: relative; overflow: hidden; padding: 9px 14px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); font-family: var(--font-oswald), Impact, sans-serif; font-size: clamp(13px, .95vw, 30px); font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
 .bank[aria-current="page"] { background: var(--ink); color: var(--paper); }
@@ -63,9 +62,6 @@
 .fullscreenError { flex-basis: 100%; color: var(--red); font-size: 14px; text-align: right; }
 @keyframes advance { from { width: 0; } to { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .progress { animation: none; width: 100%; } }
-@media (max-width: 1249px) {
-  .instruction { display: none; }
-}
 @media (max-width: 759px) {
   .display { padding: 16px; gap: 14px; }
   .header { align-items: flex-start; flex-direction: column; gap: 12px; }

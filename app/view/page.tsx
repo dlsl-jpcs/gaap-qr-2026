@@ -141,7 +141,6 @@ export default function ViewScreen() {
       </motion.section>
 
       <footer className={styles.footer}>
-        <p className={styles.instruction}>Find your name, then join your group.</p>
         {bankCount > 0 && (
           <nav className={styles.banks} aria-label="Choose groups to display">
             {Array.from({ length: bankCount }, (_, index) => {
