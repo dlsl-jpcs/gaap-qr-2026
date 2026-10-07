@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import {
   ADMIN_SESSION_COOKIE,
-  configuredAdminEmail,
   createAdminSessionToken,
   isAdminSessionValid,
 } from '@/lib/admin-session';
+import { verifyAdminPassword } from '@/lib/admin-password';
+import { SupabaseRequestError } from '@/lib/supabase-rest';
 
 export const runtime = 'nodejs';
 
@@ -15,12 +16,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const adminEmail = configuredAdminEmail();
-  const supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/$/, '');
-  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const sessionSecret = process.env.QR_GAAP_SESSION_SECRET?.trim();
 
-  if (!adminEmail || !supabaseUrl || !anonKey || !sessionSecret || sessionSecret.length < 32) {
+  if (!supabaseUrl || !serviceRoleKey || !sessionSecret || sessionSecret.length < 32) {
     return NextResponse.json(
       { success: false, message: 'Admin login is not configured on the server yet.' },
       { status: 503 },
@@ -38,45 +38,27 @@ export async function POST(request: Request) {
   }
 
   const input = typeof body === 'object' && body !== null
-    ? body as { email?: unknown; password?: unknown }
+    ? body as { password?: unknown }
     : {};
-  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
   const password = typeof input.password === 'string' ? input.password : '';
 
-  if (!email || !password || email !== adminEmail) {
+  if (!password || password.length > 256) {
     return NextResponse.json(
-      { success: false, message: 'Email or password is incorrect.' },
-      { status: 401 },
+      { success: false, message: 'Enter the admin password.' },
+      { status: 400 },
     );
   }
 
   try {
-    const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: {
-        apikey: anonKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-      cache: 'no-store',
-    });
-
-    if (!authResponse.ok) {
+    const validPassword = await verifyAdminPassword(password);
+    if (!validPassword) {
       return NextResponse.json(
-        { success: false, message: 'Email or password is incorrect.' },
+        { success: false, message: 'Incorrect admin password.' },
         { status: 401 },
       );
     }
 
-    const authData = await authResponse.json() as { user?: { email?: string } };
-    if (authData.user?.email?.trim().toLowerCase() !== adminEmail) {
-      return NextResponse.json(
-        { success: false, message: 'This account is not allowed to access the admin page.' },
-        { status: 403 },
-      );
-    }
-
-    const { token, maxAge } = createAdminSessionToken(adminEmail);
+    const { token, maxAge } = createAdminSessionToken();
     const response = NextResponse.json({ success: true });
     response.cookies.set(ADMIN_SESSION_COOKIE, token, {
       httpOnly: true,
@@ -86,9 +68,17 @@ export async function POST(request: Request) {
       maxAge,
     });
     return response;
-  } catch {
+  } catch (error) {
+    console.error('Admin password verification failed:', error instanceof Error ? error.message : 'Unknown error');
+    const missingTable = error instanceof SupabaseRequestError && error.code === 'PGRST205';
+    const missingPassword = error instanceof Error && error.message.includes('password is not set up');
     return NextResponse.json(
-      { success: false, message: 'Supabase Auth is temporarily unavailable.' },
+      {
+        success: false,
+        message: missingTable || missingPassword
+          ? 'Admin password storage is not set up. Run supabase/admin-credentials.sql in the Supabase SQL Editor, then run npm run admin:set-password.'
+          : 'Unable to verify the admin password right now.',
+      },
       { status: 503 },
     );
   }

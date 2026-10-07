@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:import-json": "node scripts/import-data-json.mjs",
+    "admin:set-password": "node scripts/set-admin-password.mjs",
     "test:nfc": "node --test tests/nfc-registration.test.cjs"
   },
   "dependencies": {

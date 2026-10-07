@@ -9,7 +9,6 @@ type AdminGroup = { groupId: number; maxCapacity: number; members: Student[] };
 export default function AdminDashboard() {
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
@@ -39,7 +38,7 @@ export default function AdminDashboard() {
       const response = await fetch('/api/admin/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ password }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -68,19 +67,8 @@ export default function AdminDashboard() {
       <main className="min-h-screen grid place-items-center p-6">
         <form onSubmit={handleLogin} className="grunge-card w-full max-w-lg p-8 md:p-10">
           <p className="font-oswald text-sm font-bold uppercase tracking-[0.25em] text-[#d92323]">QR-GAAP</p>
-          <h1 className="mt-2 mb-3 font-oswald text-5xl font-bold uppercase tracking-tight text-[#111]">Admin Login</h1>
-          <p className="mb-8 font-comic text-lg font-bold text-neutral-600">Sign in with the Supabase Auth account configured for this dashboard.</p>
-          <label htmlFor="admin-email" className="mb-2 block font-oswald text-lg uppercase tracking-widest">Email</label>
-          <input
-            id="admin-email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={event => setEmail(event.target.value)}
-            className="grunge-input mb-5"
-            disabled={loginBusy}
-          />
+          <h1 className="mt-2 mb-3 font-oswald text-5xl font-bold uppercase tracking-tight text-[#111]">Admin Access</h1>
+          <p className="mb-8 font-comic text-lg font-bold text-neutral-600">Enter the admin password to manage groups and participants.</p>
           <label htmlFor="admin-password" className="mb-2 block font-oswald text-lg uppercase tracking-widest">Password</label>
           <input
             id="admin-password"

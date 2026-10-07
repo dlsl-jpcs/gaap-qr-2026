@@ -6,13 +6,9 @@ export const ADMIN_SESSION_COOKIE = 'qr_gaap_admin_session';
 const SESSION_DURATION_SECONDS = 60 * 60 * 12;
 
 type AdminSessionPayload = {
-  email: string;
+  role: 'admin';
   expiresAt: number;
 };
-
-export function configuredAdminEmail() {
-  return process.env.SUPABASE_ADMIN_EMAIL?.trim().toLowerCase() || null;
-}
 
 function sessionSecret() {
   const secret = process.env.QR_GAAP_SESSION_SECRET;
@@ -22,9 +18,9 @@ function sessionSecret() {
   return secret;
 }
 
-export function createAdminSessionToken(email: string) {
+export function createAdminSessionToken() {
   const payload: AdminSessionPayload = {
-    email: email.toLowerCase(),
+    role: 'admin',
     expiresAt: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -48,9 +44,8 @@ function readCookie(request: Request, name: string) {
 }
 
 export function isAdminSessionValid(request: Request) {
-  const expectedEmail = configuredAdminEmail();
   const token = readCookie(request, ADMIN_SESSION_COOKIE);
-  if (!expectedEmail || !token) return false;
+  if (!token) return false;
 
   const separator = token.lastIndexOf('.');
   if (separator < 1) return false;
@@ -74,7 +69,7 @@ export function isAdminSessionValid(request: Request) {
       Buffer.from(encodedPayload, 'base64url').toString('utf8'),
     ) as AdminSessionPayload;
 
-    return payload.email === expectedEmail && payload.expiresAt > Math.floor(Date.now() / 1000);
+    return payload.role === 'admin' && payload.expiresAt > Math.floor(Date.now() / 1000);
   } catch {
     return false;
   }
