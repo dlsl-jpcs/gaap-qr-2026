@@ -71,6 +71,6 @@ The UI says it is waiting for card input; it does not claim the reader is connec
 
 ## Deployment Data Persistence
 
-The app currently reads and writes registrations, groups, and registration mode in the local `data.json` file. Vercel's serverless runtime does not provide durable writable storage for this file, so registrations and admin changes may not persist reliably across deployments or function instances. Use a persistent database before relying on Vercel for live event data; this is separate from NFC input support.
+The app currently reads and writes registrations, groups, and registration mode in the local `data.json` file. Vercel Functions have a read-only filesystem, so these writes can fail at runtime; temporary storage is not durable across invocations or instances. Use a persistent database before relying on Vercel for live event data. This limitation comes from the existing JSON-file persistence and is separate from NFC input support.
 
 From `/admin`, select **Add Participant** to add a person directly without a DLSL lookup. Enter a name and optionally provide a student number or card UID; the participant is assigned to the least-filled group.
