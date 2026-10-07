@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import SuccessCard from '@/components/SuccessCard';
 import { canCaptureNfcKeyboardInput, NfcKeyboardScanBuffer } from '@/lib/nfc-keyboard-scan';
 
@@ -211,7 +212,14 @@ export default function Home() {
             className="w-full max-w-md grunge-card p-10 z-10"
           >
             <div className="text-center mb-10 border-b-[6px] border-[#111] pb-6">
-              <h3 className="font-oswald text-4xl tracking-tighter uppercase leading-none mb-1">JPCS</h3>
+              <Image
+                src="/jpcs-logo.png"
+                alt="Junior Philippine Computer Society logo"
+                width={128}
+                height={128}
+                priority
+                className="mx-auto mb-2 h-16 w-16 rounded-full object-cover"
+              />
               <h1 className="font-oswald text-5xl md:text-[3.5rem] font-bold tracking-tighter leading-[0.9] uppercase mt-2">
                 General <br/> Assembly <br/> 
                 <span className="text-3xl">& Acquaintance</span> <br/>
