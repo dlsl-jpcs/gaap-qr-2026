@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
+import { isAdminSessionValid } from '@/lib/admin-session';
 import { assignStudent } from '@/lib/db';
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json({ success: false }, { status: 404 });
+  }
+  if (!isAdminSessionValid(request)) {
+    return NextResponse.json({ success: false, message: 'Admin login required.' }, { status: 401 });
+  }
+
   try {
     const { count } = await request.json();
     const amount = Number(count) || 50;
@@ -10,7 +18,7 @@ export async function POST(request: Request) {
     for (let i = 0; i < amount; i++) {
       // random 9-digit student number
       const randomSn = Math.floor(100000000 + Math.random() * 900000000).toString();
-      const res = assignStudent(`Test Student ${randomSn.slice(-4)}`, randomSn);
+      const res = await assignStudent(`Test Student ${randomSn.slice(-4)}`, randomSn);
       if (!res.success) {
          break; // Event full or some other limit hit
       }
@@ -19,6 +27,7 @@ export async function POST(request: Request) {
     
     return NextResponse.json({ success: true, message: `Successfully added ${added} students.` });
   } catch (e) {
+    console.error('Error mass adding participants:', e instanceof Error ? e.message : 'Unknown error');
     return NextResponse.json({ success: false, message: "Error mass adding." }, { status: 400 });
   }
 }

@@ -1,6 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
+import 'server-only';
+
+import { supabaseQuery, supabaseRest } from '@/lib/supabase-rest';
 
 export interface Student {
   id: string;
@@ -23,177 +23,190 @@ export interface DbData {
   registrationMode: RegistrationMode;
 }
 
-const DATA_FILE = path.join(process.cwd(), 'data.json');
-const DEFAULT_REGISTRATION_MODE: RegistrationMode = 'studentNumber';
+type SupabaseGroup = {
+  id: number;
+  capacity: number;
+};
+
+type SupabaseStudent = {
+  id: string;
+  name: string;
+  student_number: string | null;
+  card_tag: string | null;
+  group_id: number;
+  joined_at: string;
+};
+
+type RegistrationResponse = {
+  success: boolean;
+  student?: {
+    id: string;
+    name: string;
+    studentNumber: string;
+    groupId: number;
+    timestamp: string;
+  };
+  message: string;
+};
+
+type OperationResponse = {
+  success: boolean;
+  message?: string;
+};
 
 const isRegistrationMode = (value: unknown): value is RegistrationMode =>
   value === 'nfc' || value === 'studentNumber' || value === 'manualName';
 
-const initDb = () => {
-  if (!fs.existsSync(DATA_FILE)) {
-    const initialGroups = Array.from({ length: 14 }, (_, i) => ({
-      id: i + 1,
-      maxCapacity: 20
-    }));
-    fs.writeFileSync(DATA_FILE, JSON.stringify({
-      students: [],
-      groups: initialGroups,
-      registrationMode: DEFAULT_REGISTRATION_MODE,
-    }, null, 2));
-  } else {
-    // Migration: add groups array if missing
-    try {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      let changed = false;
-      if (!parsed.groups) {
-        parsed.groups = Array.from({ length: 14 }, (_, i) => ({
-          id: i + 1,
-          maxCapacity: 20
-        }));
-        changed = true;
-      }
-      if (!isRegistrationMode(parsed.registrationMode)) {
-        parsed.registrationMode = DEFAULT_REGISTRATION_MODE;
-        changed = true;
-      }
-      if (changed) fs.writeFileSync(DATA_FILE, JSON.stringify(parsed, null, 2));
-    } catch(e) {}
+export async function getRegistrationMode(): Promise<RegistrationMode> {
+  const settings = await supabaseRest<Array<{ registration_mode: string }>>(
+    `event_settings?${supabaseQuery({
+      select: 'registration_mode',
+      singleton: 'eq.true',
+      limit: '1',
+    })}`,
+  );
+  const registrationMode = settings[0]?.registration_mode;
+  if (!isRegistrationMode(registrationMode)) {
+    throw new Error('Supabase event settings are missing or have an invalid registration mode.');
   }
-};
+  return registrationMode;
+}
 
-export const getDbData = (): DbData => {
-  initDb();
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return {
-      ...parsed,
-      students: Array.isArray(parsed.students) ? parsed.students : [],
-      groups: Array.isArray(parsed.groups) ? parsed.groups : [],
-      registrationMode: isRegistrationMode(parsed.registrationMode)
-        ? parsed.registrationMode
-        : DEFAULT_REGISTRATION_MODE,
-    } as DbData;
-  } catch (e) {
-    return { students: [], groups: [], registrationMode: DEFAULT_REGISTRATION_MODE };
-  }
-};
+function mapStudent(student: SupabaseStudent): Student {
+  return {
+    id: student.id,
+    name: student.name,
+    studentNumber: student.student_number || student.card_tag || '',
+    groupId: student.group_id,
+    timestamp: student.joined_at,
+  };
+}
 
-export const saveDbData = (data: DbData) => {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-};
+export async function getDbData(): Promise<DbData> {
+  const [groups, students, settings] = await Promise.all([
+    supabaseRest<SupabaseGroup[]>(
+      `groups?${supabaseQuery({ select: 'id,capacity', order: 'id.asc' })}`,
+    ),
+    supabaseRest<SupabaseStudent[]>(
+      `students?${supabaseQuery({
+        select: 'id,name,student_number,card_tag,group_id,joined_at',
+        order: 'joined_at.asc',
+      })}`,
+    ),
+    supabaseRest<Array<{ registration_mode: string }>>(
+      `event_settings?${supabaseQuery({
+        select: 'registration_mode',
+        singleton: 'eq.true',
+        limit: '1',
+      })}`,
+    ),
+  ]);
 
-export const setRegistrationMode = (registrationMode: RegistrationMode) => {
-  const data = getDbData();
-  data.registrationMode = registrationMode;
-  saveDbData(data);
-  return data.registrationMode;
-};
-
-export const assignStudent = (name: string, studentNumber = '') => {
-  const data = getDbData();
-  const normalizedName = name.trim();
-  const normalizedStudentNumber = studentNumber.trim();
-  
-  // Check by ID or card UID when one was supplied.
-  const existing = normalizedStudentNumber
-    ? data.students.find(s =>
-        typeof s.studentNumber === 'string' &&
-        s.studentNumber.toLowerCase() === normalizedStudentNumber.toLowerCase()
-      )
-    : undefined;
-  if (existing) {
-    return { success: true, student: existing, message: "You have already joined a group." };
+  const registrationMode = settings[0]?.registration_mode;
+  if (!isRegistrationMode(registrationMode)) {
+    throw new Error('Supabase event settings are missing or have an invalid registration mode.');
   }
 
-  // Count current members per group
-  const groupCounts = data.groups.map(g => ({
-    groupId: g.id,
-    maxCapacity: g.maxCapacity,
-    count: data.students.filter(s => s.groupId === g.id).length
-  }));
+  return {
+    groups: groups.map(group => ({ id: group.id, maxCapacity: group.capacity })),
+    students: students.map(mapStudent),
+    registrationMode,
+  };
+}
 
-  if (groupCounts.length === 0) {
-    return { success: false, message: "No groups available!" };
+export async function setRegistrationMode(registrationMode: RegistrationMode) {
+  const updated = await supabaseRest<Array<{ registration_mode: RegistrationMode }>>(
+    `event_settings?${supabaseQuery({ singleton: 'eq.true' })}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ registration_mode: registrationMode, updated_at: new Date().toISOString() }),
+    },
+  );
+
+  if (!updated[0]) {
+    throw new Error('The event settings row is missing. Run the Supabase setup SQL again.');
   }
+  return updated[0].registration_mode;
+}
 
-  // Filter out groups that are at or over capacity
-  const availableGroups = groupCounts.filter(g => g.count < g.maxCapacity);
-
-  if (availableGroups.length === 0) {
-    return { success: false, message: "All groups are at maximum capacity!" };
-  }
-
-  // Sort by count ascending, then by groupId ascending
-  availableGroups.sort((a, b) => {
-    if (a.count === b.count) {
-      return a.groupId - b.groupId; // Tie breaker: lowest group ID
-    }
-    return a.count - b.count;
+export async function assignStudent(
+  name: string,
+  identifier = '',
+  identifierKind: 'studentNumber' | 'cardTag' = 'studentNumber',
+) {
+  const cleanIdentifier = identifier.trim();
+  const result = await supabaseRest<RegistrationResponse>('rpc/register_participant', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_name: name.trim(),
+      p_student_number: identifierKind === 'studentNumber' ? cleanIdentifier || null : null,
+      p_card_tag: identifierKind === 'cardTag' ? cleanIdentifier || null : null,
+    }),
   });
 
-  const assignedGroupId = availableGroups[0].groupId;
-  
-  // Insert
-  const newStudent: Student = {
-    id: crypto.randomUUID(),
-    name: normalizedName,
-    studentNumber: normalizedStudentNumber,
-    groupId: assignedGroupId,
-    timestamp: new Date().toISOString()
-  };
-
-  data.students.push(newStudent);
-  saveDbData(data);
-
-  return { success: true, student: newStudent, message: "Successfully assigned to a group!" };
-};
-
-export const createGroup = () => {
-  const data = getDbData();
-  const nextId = data.groups.length > 0 ? Math.max(...data.groups.map(g => g.id)) + 1 : 1;
-  data.groups.push({ id: nextId, maxCapacity: 20 });
-  saveDbData(data);
-  return nextId;
-};
-
-export const deleteGroup = (id: number) => {
-  const data = getDbData();
-  data.groups = data.groups.filter(g => g.id !== id);
-  data.students = data.students.filter(s => s.groupId !== id);
-  saveDbData(data);
-};
-
-export const updateGroupCapacity = (id: number, maxCapacity: number) => {
-  const data = getDbData();
-  const group = data.groups.find(g => g.id === id);
-  if (group) {
-    group.maxCapacity = maxCapacity;
-    saveDbData(data);
+  if (result.success && result.student) {
+    return { ...result, student: result.student };
   }
-};
+  return result;
+}
 
-export const moveStudent = (studentId: string, newGroupId: number) => {
-  const data = getDbData();
-  const student = data.students.find(s => s.id === studentId);
-  const group = data.groups.find(g => g.id === newGroupId);
-  
-  if (!student || !group) return { success: false, message: "Student or group not found" };
+export async function createGroup() {
+  const groups = await supabaseRest<Array<{ id: number }>>(
+    `groups?${supabaseQuery({ select: 'id', order: 'id.asc' })}`,
+  );
+  const existingIds = new Set(groups.map(group => group.id));
+  const id = Array.from({ length: 14 }, (_, index) => index + 1)
+    .find(candidate => !existingIds.has(candidate));
 
-  if (student.groupId === newGroupId) return { success: true };
-
-  const currentMembersCount = data.students.filter(s => s.groupId === newGroupId).length;
-  if (currentMembersCount >= group.maxCapacity) {
-    return { success: false, message: "Target group is already at full capacity." };
+  if (!id) {
+    throw new Error('All 14 groups already exist.');
   }
 
-  student.groupId = newGroupId;
-  saveDbData(data);
-  return { success: true };
-};
+  await supabaseRest('groups', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      id,
+      name: `Group ${String(id).padStart(2, '0')}`,
+      capacity: 20,
+    }),
+  });
+  return id;
+}
 
-export const resetDb = () => {
-  const data = getDbData();
-  saveDbData({ students: [], groups: data.groups, registrationMode: data.registrationMode });
-};
+export async function deleteGroup(id: number) {
+  return supabaseRest<OperationResponse>('rpc/delete_group_with_members', {
+    method: 'POST',
+    body: JSON.stringify({ p_group_id: id }),
+  });
+}
+
+export async function updateGroupCapacity(id: number, maxCapacity: number) {
+  const result = await supabaseRest<OperationResponse>('rpc/update_group_capacity', {
+    method: 'POST',
+    body: JSON.stringify({ p_group_id: id, p_capacity: maxCapacity }),
+  });
+  return result;
+}
+
+export async function moveStudent(studentId: string, newGroupId: number) {
+  return supabaseRest<OperationResponse>('rpc/move_student_to_group', {
+    method: 'POST',
+    body: JSON.stringify({ p_student_id: studentId, p_new_group_id: newGroupId }),
+  });
+}
+
+export async function deleteStudent(studentId: string) {
+  return supabaseRest<OperationResponse>('rpc/delete_participant', {
+    method: 'POST',
+    body: JSON.stringify({ p_student_id: studentId }),
+  });
+}
+
+export async function resetDb() {
+  return supabaseRest<OperationResponse>('rpc/reset_registration_data', {
+    method: 'POST',
+    body: '{}',
+  });
+}

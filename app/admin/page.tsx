@@ -1,12 +1,110 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { Users, Trash2, Plus, GripVertical, AlertTriangle, Download, Settings, UserPlus } from 'lucide-react';
+import { Users, Trash2, Plus, GripVertical, AlertTriangle, Download, Settings, UserPlus, LogOut } from 'lucide-react';
 import type { Student } from '@/lib/db';
 
 type RegistrationMode = 'nfc' | 'studentNumber' | 'manualName';
 type AdminGroup = { groupId: number; maxCapacity: number; members: Student[] };
 
 export default function AdminDashboard() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/admin/session', { cache: 'no-store' })
+      .then(response => response.json())
+      .then(data => {
+        if (active) setAuthenticated(data.authenticated === true);
+      })
+      .catch(() => {
+        if (active) setLoginError('Unable to check admin login. Refresh the page to try again.');
+      })
+      .finally(() => {
+        if (active) setAuthChecked(true);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loginBusy) return;
+    setLoginBusy(true);
+    setLoginError('');
+    try {
+      const response = await fetch('/api/admin/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to sign in.');
+      }
+      setAuthenticated(true);
+      setPassword('');
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
+    } finally {
+      setLoginBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/admin/session', { method: 'DELETE' }).catch(() => undefined);
+    setAuthenticated(false);
+  };
+
+  if (!authChecked) {
+    return <main className="min-h-screen grid place-items-center p-6 font-oswald text-2xl">Checking admin access…</main>;
+  }
+
+  if (!authenticated) {
+    return (
+      <main className="min-h-screen grid place-items-center p-6">
+        <form onSubmit={handleLogin} className="grunge-card w-full max-w-lg p-8 md:p-10">
+          <p className="font-oswald text-sm font-bold uppercase tracking-[0.25em] text-[#d92323]">QR-GAAP</p>
+          <h1 className="mt-2 mb-3 font-oswald text-5xl font-bold uppercase tracking-tight text-[#111]">Admin Login</h1>
+          <p className="mb-8 font-comic text-lg font-bold text-neutral-600">Sign in with the Supabase Auth account configured for this dashboard.</p>
+          <label htmlFor="admin-email" className="mb-2 block font-oswald text-lg uppercase tracking-widest">Email</label>
+          <input
+            id="admin-email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={event => setEmail(event.target.value)}
+            className="grunge-input mb-5"
+            disabled={loginBusy}
+          />
+          <label htmlFor="admin-password" className="mb-2 block font-oswald text-lg uppercase tracking-widest">Password</label>
+          <input
+            id="admin-password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={event => setPassword(event.target.value)}
+            className="grunge-input"
+            disabled={loginBusy}
+          />
+          {loginError && <p role="alert" className="mt-4 border-2 border-[#d92323] bg-white p-3 font-comic font-bold text-[#9e1717]">{loginError}</p>}
+          <button type="submit" disabled={loginBusy} className="grunge-btn mt-7 w-full bg-[#111] px-6 py-4 font-oswald text-2xl font-bold uppercase tracking-widest text-white hover:bg-[#d92323] disabled:opacity-50">
+            {loginBusy ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  return <AdminDashboardContent onLogout={handleLogout} />;
+}
+
+function AdminDashboardContent({ onLogout }: { onLogout: () => void }) {
   const [groups, setGroups] = useState<AdminGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [totalCapacity, setTotalCapacity] = useState(0);
@@ -15,6 +113,7 @@ export default function AdminDashboard() {
   const [addParticipantOpen, setAddParticipantOpen] = useState(false);
   const [participantName, setParticipantName] = useState('');
   const [participantIdentifier, setParticipantIdentifier] = useState('');
+  const [participantIdentifierKind, setParticipantIdentifierKind] = useState<'studentNumber' | 'cardTag'>('studentNumber');
   const [participantSaving, setParticipantSaving] = useState(false);
   
   // Custom dialog state
@@ -34,7 +133,7 @@ export default function AdminDashboard() {
 
   const fetchGroups = async () => {
     try {
-      const res = await fetch('/api/groups');
+      const res = await fetch('/api/admin/groups', { cache: 'no-store' });
       const data = await res.json();
       if (data.success) {
         setGroups(data.groups);
@@ -48,7 +147,7 @@ export default function AdminDashboard() {
           setRegistrationMode(data.registrationMode);
         }
       }
-    } catch (e) {}
+    } catch {}
   };
 
   useEffect(() => {
@@ -105,7 +204,7 @@ export default function AdminDashboard() {
       const res = await fetch('/api/admin/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, studentNumber })
+        body: JSON.stringify({ name, studentNumber, identifierKind: participantIdentifierKind })
       });
       const data = await res.json();
 
@@ -116,6 +215,7 @@ export default function AdminDashboard() {
       setAddParticipantOpen(false);
       setParticipantName('');
       setParticipantIdentifier('');
+      setParticipantIdentifierKind('studentNumber');
       await fetchGroups();
     } catch (error) {
       setErrorDialog({
@@ -148,12 +248,13 @@ export default function AdminDashboard() {
   const confirmAction = async () => {
     if (confirmDialog.type === 'student' && confirmDialog.id) {
       try {
-        await fetch('/api/dev/delete', {
-          method: 'POST',
+        await fetch('/api/admin/students', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: confirmDialog.id })
         });
         fetchGroups(); 
-      } catch (e) {}
+      } catch {}
     } else if (confirmDialog.type === 'group' && confirmDialog.id) {
       try {
         await fetch('/api/admin/groups', {
@@ -161,7 +262,7 @@ export default function AdminDashboard() {
           body: JSON.stringify({ action: 'delete', groupId: confirmDialog.id })
         });
         fetchGroups();
-      } catch (e) {}
+      } catch {}
     }
     setConfirmDialog({ isOpen: false, type: 'student', id: null, message: '' });
   };
@@ -173,7 +274,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ action: 'create' })
       });
       fetchGroups();
-    } catch (e) {}
+    } catch {}
   };
 
   const handleCapacityChange = async (groupId: number, newCapacity: number) => {
@@ -184,7 +285,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ action: 'capacity', groupId, maxCapacity: newCapacity })
       });
       fetchGroups();
-    } catch (e) {}
+    } catch {}
   };
 
   const handleDragStart = (e: React.DragEvent, studentId: string) => {
@@ -206,7 +307,7 @@ export default function AdminDashboard() {
          setErrorDialog({ isOpen: true, message: data.message });
       }
       fetchGroups();
-    } catch (e) {}
+    } catch {}
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -221,6 +322,13 @@ export default function AdminDashboard() {
           <p className="font-comic font-bold text-xl text-neutral-700 italic">Manage Groups & Participants</p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
+          <button
+            onClick={onLogout}
+            className="inline-flex items-center gap-2 px-4 py-3 bg-white text-[#111] font-oswald border-4 border-[#111] hover:bg-neutral-200 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="font-bold uppercase tracking-widest">Sign Out</span>
+          </button>
           <button 
             onClick={handleCreateGroup}
             className="grunge-btn px-6 py-4 flex items-center gap-2 bg-[#111] text-white hover:bg-[#d92323] transition-colors"
@@ -390,6 +498,19 @@ export default function AdminDashboard() {
               className="grunge-input"
               disabled={participantSaving}
             />
+            <label className="font-oswald text-lg uppercase tracking-widest text-[#111] mt-5 mb-2" htmlFor="participant-identifier-kind">
+              Identifier Type
+            </label>
+            <select
+              id="participant-identifier-kind"
+              value={participantIdentifierKind}
+              onChange={event => setParticipantIdentifierKind(event.target.value as 'studentNumber' | 'cardTag')}
+              className="grunge-input"
+              disabled={participantSaving}
+            >
+              <option value="studentNumber">Student Number</option>
+              <option value="cardTag">NFC Card UID (hex)</option>
+            </select>
             <p className="font-comic font-bold text-neutral-600 mt-2 mb-8">
               This adds the participant directly without a DLSL lookup. They will be assigned to the least-filled group.
             </p>
@@ -401,6 +522,7 @@ export default function AdminDashboard() {
                   setAddParticipantOpen(false);
                   setParticipantName('');
                   setParticipantIdentifier('');
+                  setParticipantIdentifierKind('studentNumber');
                 }}
                 disabled={participantSaving}
                 className="font-oswald font-bold text-xl uppercase tracking-widest px-6 py-3 bg-white border-2 border-[#111] text-[#111] hover:bg-neutral-200 transition-colors shadow-[4px_4px_0px_#111] disabled:opacity-50"

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:import-json": "node scripts/import-data-json.mjs",
     "test:nfc": "node --test tests/nfc-registration.test.cjs"
   },
   "dependencies": {

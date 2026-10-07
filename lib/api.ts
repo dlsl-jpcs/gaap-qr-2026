@@ -1,3 +1,5 @@
+import 'server-only';
+
 import axios from 'axios';
 import https from 'https';
 
@@ -9,10 +11,10 @@ const httpsAgent = new https.Agent({
 });
 
 export async function fetchStudentInfo(studentId: string) {
-  // If no env variables are set, these defaults are used
   const apiUrl = process.env.PORTAL_BASE_URL || 'https://portal.dlsl.edu.ph';
   const apiPath = process.env.PORTAL_HELPER_PATH || '/registration/event/helper.php';
-  const regKey = process.env.REG_KEY ? process.env.REG_KEY.replace(/"/g, '') : '20250515U60HB0';
+  const regKey = process.env.REG_KEY?.replace(/"/g, '');
+  if (!regKey) throw new Error('REG_KEY is not configured on the server.');
 
   const formData = new URLSearchParams({
     action: 'registration_tapregister',

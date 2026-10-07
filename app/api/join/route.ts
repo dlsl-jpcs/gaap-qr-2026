@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { assignStudent, getDbData } from '@/lib/db';
+import { assignStudent, getRegistrationMode } from '@/lib/db';
 import { fetchStudentInfo, deriveDisplayName } from '@/lib/api';
 
 export async function POST(request: Request) {
@@ -15,7 +15,16 @@ export async function POST(request: Request) {
   }
 
   const requestData = typeof body === 'object' && body !== null ? body : {};
-  const registrationMode = getDbData().registrationMode;
+  let registrationMode;
+  try {
+    registrationMode = await getRegistrationMode();
+  } catch (error) {
+    console.error('Unable to read registration settings:', error instanceof Error ? error.message : 'Unknown error');
+    return NextResponse.json(
+      { success: false, message: 'Registration is temporarily unavailable.' },
+      { status: 503 },
+    );
+  }
 
   if (registrationMode === 'manualName') {
     const rawName = 'name' in requestData ? requestData.name : undefined;
@@ -35,7 +44,15 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(assignStudent(name));
+    try {
+      return NextResponse.json(await assignStudent(name));
+    } catch (error) {
+      console.error('Manual participant registration failed:', error instanceof Error ? error.message : 'Unknown error');
+      return NextResponse.json(
+        { success: false, message: 'Unable to register right now. Please try again.' },
+        { status: 503 },
+      );
+    }
   }
 
   const rawStudentNumber = 'studentNumber' in requestData
@@ -80,7 +97,11 @@ export async function POST(request: Request) {
     }
 
     const finalName = info.name || deriveDisplayName(info.email);
-    const result = assignStudent(finalName, formattedStudentNumber);
+    const result = await assignStudent(
+      finalName,
+      formattedStudentNumber,
+      isNfcMode ? 'cardTag' : 'studentNumber',
+    );
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown lookup error';

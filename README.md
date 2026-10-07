@@ -1,43 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QR-GAAP
 
-## Getting Started
+QR-GAAP is a Next.js registration and group assignment app. Supabase stores the participant roster, group capacities, and registration mode. DLSL student lookups stay on the server.
 
-First, run the development server:
+## Connect this checkout to Supabase
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. In Supabase, open **Project Settings → API** and copy the Project URL, publishable/anon key, and `service_role` key.
+2. Copy `.env.example` to `.env.local` in the project root.
+3. Replace the Supabase placeholders in `.env.local`:
+   - `SUPABASE_URL`: the Project URL.
+   - `SUPABASE_ANON_KEY`: the publishable/anon key. This is used only by the server-side login route.
+   - `SUPABASE_SERVICE_ROLE_KEY`: the `service_role` secret. It must remain server-only; never rename it to a `NEXT_PUBLIC_...` variable or put it in browser code.
+   - `SUPABASE_ADMIN_EMAIL`: the one email address allowed to sign in to `/admin`.
+   - `QR_GAAP_SESSION_SECRET`: generate a random value of at least 32 characters. In PowerShell, run `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` and paste the result.
+4. Set the existing DLSL values (`REG_KEY`, `PORTAL_BASE_URL`, `PORTAL_HELPER_PATH`) in the same file. `REG_KEY` is used only by the server.
+5. In Supabase **Authentication → Users**, create the admin account whose email matches `SUPABASE_ADMIN_EMAIL`. The dashboard verifies that account’s password through Supabase Auth; no `profiles.role` update is needed.
+6. In the Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql) to create/seed the three registration tables (`groups`, `students`, and `event_settings`). It does not add the future game system. Then run [`supabase/runtime-functions.sql`](supabase/runtime-functions.sql) to create the server-side registration/group operations. If you already have these three tables, compare their columns with `schema.sql` before running it; `create table if not exists` does not retrofit incompatible existing tables.
+7. If the old `data.json` roster should be copied to Supabase, keep a backup and run `npm run db:import-json`. The importer inserts missing rows and does not overwrite rows already in Supabase. Add `-- --include-registration-mode` only if you also want it to copy the old JSON registration mode. It never edits or deletes `data.json`.
+8. Run `npm run dev`, then open `/admin` and sign in. The public registration page and `/view` now read the same Supabase database.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+For Vercel, configure the same environment variables in **Project Settings → Environment Variables**, then redeploy. Never add the service-role key to a `NEXT_PUBLIC_` variable.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Registration modes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+From `/admin`, choose one of the existing registration modes:
 
-## Learn More
+- **NFC Reader** reads the card UID and looks up the participant through the DLSL student API.
+- **Student Number** accepts a typed student number and looks it up through DLSL.
+- **Manual Name Entry** accepts a name directly without a lookup.
 
-To learn more about Next.js, take a look at the following resources:
+The selected mode is stored in `event_settings` and applies to the public registration page immediately. Admin can add a participant directly from the dashboard, select whether an optional identifier is a student number or NFC card UID, and assign that participant to the least-filled available group.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## NFC card reader
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The browser input expects a USB NFC reader configured as a keyboard wedge (HID keyboard). Configure it to type the card UID as hexadecimal characters without a `0x` prefix or separators, ending with Enter or a short pause. Keep the registration page focused in the foreground while scanning. QR-GAAP normalizes the UID to lowercase and sends it to `/api/join`; `lib/api.ts` passes that value as the DLSL API’s `card_tag` parameter.
 
-## Deploy on Vercel
+The website cannot detect whether a keyboard-emulating reader is physically attached. For a Vercel deployment, the scan still requires a reader connected to the computer displaying the registration page.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Admin access
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`/admin` uses a 12-hour HTTP-only signed session cookie created after Supabase Auth accepts the configured admin email and password. All admin write/export routes check this session. The service-role key stays on the server and is not included in browser bundles.
 
-## Exporting Names for the Raffle
+## Raffle export
 
-From `/admin`, select **Export Names** to download `qr-gaap-student-names.json`. The export contains the registered student names in a format that can be imported by the Netflix-themed raffle project:
+From `/admin`, select **Export Names** to download `qr-gaap-student-names.json` for the raffle project:
 
 ```json
 {
@@ -46,31 +51,3 @@ From `/admin`, select **Export Names** to download `qr-gaap-student-names.json`.
   "names": ["Student One", "Student Two"]
 }
 ```
-
-## Registration Mode
-
-From `/admin`, use **Registration Mode** to choose how participants are registered:
-
-- **NFC Reader** reads the card UID and looks up the participant through the DLSL student portal.
-- **Student Number** lets the participant type their student number for a DLSL portal lookup.
-- **Manual Name Entry** lets the participant enter their name directly without a student-number lookup.
-
-The selected mode is saved in `data.json` and applies to the public registration page immediately.
-
-## NFC Card Reader
-
-In **NFC Reader** mode, QR-GAAP accepts input from a USB NFC reader configured as a keyboard wedge (HID keyboard). No local PC/SC bridge is used. Start the website with:
-
-```bash
-npm run dev
-```
-
-Configure the reader to type the card UID as hexadecimal characters without a `0x` prefix or separators, and to finish with Enter or a short pause. The scan field must be focused and the browser page must be in the foreground. QR-GAAP buffers the scan, normalizes the UID to lowercase, and posts it to `/api/join`; the server passes that value to the DLSL lookup as `card_tag`.
-
-The UI says it is waiting for card input; it does not claim the reader is connected because keyboard input cannot establish the reader's physical connection state. Student Number and Manual Name Entry remain available as admin-selected modes.
-
-## Deployment Data Persistence
-
-The app currently reads and writes registrations, groups, and registration mode in the local `data.json` file. Vercel Functions have a read-only filesystem, so these writes can fail at runtime; temporary storage is not durable across invocations or instances. Use a persistent database before relying on Vercel for live event data. This limitation comes from the existing JSON-file persistence and is separate from NFC input support.
-
-From `/admin`, select **Add Participant** to add a person directly without a DLSL lookup. Enter a name and optionally provide a student number or card UID; the participant is assigned to the least-filled group.
