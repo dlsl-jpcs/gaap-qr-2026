@@ -10,15 +10,13 @@ export default function SuccessCard({ groupNumber }: { groupNumber: number }) {
       transition={{ type: "spring", bounce: 0.5 }}
       className="w-full max-w-sm grunge-card overflow-visible p-12 text-center relative z-10"
     >
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-transparent rounded-full flex items-center justify-center border-[6px] border-[#111] shadow-[4px_4px_0px_#111]">
-        <Image
-          src="/jpcs-logo.png"
-          alt="Junior Philippine Computer Society logo"
-          width={64}
-          height={64}
-          className="h-16 w-16 rounded-full object-cover"
-        />
-      </div>
+      <Image
+        src="/jpcs-logo.png"
+        alt="Junior Philippine Computer Society logo"
+        width={80}
+        height={80}
+        className="absolute top-0 left-1/2 z-10 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full object-cover"
+      />
       
       <h2 className="font-comic text-2xl text-neutral-600 mb-4 mt-6 italic font-bold">You are assigned to</h2>
       
