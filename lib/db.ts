@@ -15,12 +15,19 @@ export interface GroupConfig {
   maxCapacity: number;
 }
 
+export type RegistrationMode = 'nfc' | 'studentNumber' | 'manualName';
+
 export interface DbData {
   students: Student[];
   groups: GroupConfig[];
+  registrationMode: RegistrationMode;
 }
 
 const DATA_FILE = path.join(process.cwd(), 'data.json');
+const DEFAULT_REGISTRATION_MODE: RegistrationMode = 'studentNumber';
+
+const isRegistrationMode = (value: unknown): value is RegistrationMode =>
+  value === 'nfc' || value === 'studentNumber' || value === 'manualName';
 
 const initDb = () => {
   if (!fs.existsSync(DATA_FILE)) {
@@ -28,19 +35,29 @@ const initDb = () => {
       id: i + 1,
       maxCapacity: 20
     }));
-    fs.writeFileSync(DATA_FILE, JSON.stringify({ students: [], groups: initialGroups }, null, 2));
+    fs.writeFileSync(DATA_FILE, JSON.stringify({
+      students: [],
+      groups: initialGroups,
+      registrationMode: DEFAULT_REGISTRATION_MODE,
+    }, null, 2));
   } else {
     // Migration: add groups array if missing
     try {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
+      let changed = false;
       if (!parsed.groups) {
         parsed.groups = Array.from({ length: 14 }, (_, i) => ({
           id: i + 1,
           maxCapacity: 20
         }));
-        fs.writeFileSync(DATA_FILE, JSON.stringify(parsed, null, 2));
+        changed = true;
       }
+      if (!isRegistrationMode(parsed.registrationMode)) {
+        parsed.registrationMode = DEFAULT_REGISTRATION_MODE;
+        changed = true;
+      }
+      if (changed) fs.writeFileSync(DATA_FILE, JSON.stringify(parsed, null, 2));
     } catch(e) {}
   }
 };
@@ -49,9 +66,17 @@ export const getDbData = (): DbData => {
   initDb();
   try {
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      students: Array.isArray(parsed.students) ? parsed.students : [],
+      groups: Array.isArray(parsed.groups) ? parsed.groups : [],
+      registrationMode: isRegistrationMode(parsed.registrationMode)
+        ? parsed.registrationMode
+        : DEFAULT_REGISTRATION_MODE,
+    } as DbData;
   } catch (e) {
-    return { students: [], groups: [] };
+    return { students: [], groups: [], registrationMode: DEFAULT_REGISTRATION_MODE };
   }
 };
 
@@ -59,11 +84,25 @@ export const saveDbData = (data: DbData) => {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 };
 
-export const assignStudent = (name: string, studentNumber: string) => {
+export const setRegistrationMode = (registrationMode: RegistrationMode) => {
   const data = getDbData();
+  data.registrationMode = registrationMode;
+  saveDbData(data);
+  return data.registrationMode;
+};
+
+export const assignStudent = (name: string, studentNumber = '') => {
+  const data = getDbData();
+  const normalizedName = name.trim();
+  const normalizedStudentNumber = studentNumber.trim();
   
-  // Check if student already exists
-  const existing = data.students.find(s => s.studentNumber === studentNumber);
+  // Check by ID or card UID when one was supplied.
+  const existing = normalizedStudentNumber
+    ? data.students.find(s =>
+        typeof s.studentNumber === 'string' &&
+        s.studentNumber.toLowerCase() === normalizedStudentNumber.toLowerCase()
+      )
+    : undefined;
   if (existing) {
     return { success: true, student: existing, message: "You have already joined a group." };
   }
@@ -99,8 +138,8 @@ export const assignStudent = (name: string, studentNumber: string) => {
   // Insert
   const newStudent: Student = {
     id: crypto.randomUUID(),
-    name,
-    studentNumber,
+    name: normalizedName,
+    studentNumber: normalizedStudentNumber,
     groupId: assignedGroupId,
     timestamp: new Date().toISOString()
   };
@@ -156,5 +195,5 @@ export const moveStudent = (studentId: string, newGroupId: number) => {
 
 export const resetDb = () => {
   const data = getDbData();
-  saveDbData({ students: [], groups: data.groups });
+  saveDbData({ students: [], groups: data.groups, registrationMode: data.registrationMode });
 };

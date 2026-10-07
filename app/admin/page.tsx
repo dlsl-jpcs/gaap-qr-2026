@@ -1,11 +1,21 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { Users, Trash2, Plus, GripVertical, AlertTriangle } from 'lucide-react';
+import { Users, Trash2, Plus, GripVertical, AlertTriangle, Download, Settings, UserPlus } from 'lucide-react';
+import type { Student } from '@/lib/db';
+
+type RegistrationMode = 'nfc' | 'studentNumber' | 'manualName';
+type AdminGroup = { groupId: number; maxCapacity: number; members: Student[] };
 
 export default function AdminDashboard() {
-  const [groups, setGroups] = useState<any[]>([]);
+  const [groups, setGroups] = useState<AdminGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [totalCapacity, setTotalCapacity] = useState(0);
+  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('studentNumber');
+  const [modeSaving, setModeSaving] = useState(false);
+  const [addParticipantOpen, setAddParticipantOpen] = useState(false);
+  const [participantName, setParticipantName] = useState('');
+  const [participantIdentifier, setParticipantIdentifier] = useState('');
+  const [participantSaving, setParticipantSaving] = useState(false);
   
   // Custom dialog state
   const [confirmDialog, setConfirmDialog] = useState<{ 
@@ -29,16 +39,93 @@ export default function AdminDashboard() {
       if (data.success) {
         setGroups(data.groups);
         setTotal(data.total);
-        setTotalCapacity(data.groups.reduce((acc: number, g: any) => acc + g.maxCapacity, 0));
+        setTotalCapacity(data.groups.reduce((acc: number, group: AdminGroup) => acc + group.maxCapacity, 0));
+        if (
+          data.registrationMode === 'nfc' ||
+          data.registrationMode === 'manualName' ||
+          data.registrationMode === 'studentNumber'
+        ) {
+          setRegistrationMode(data.registrationMode);
+        }
       }
     } catch (e) {}
   };
 
   useEffect(() => {
-    fetchGroups();
+    const initialFetch = window.setTimeout(() => void fetchGroups(), 0);
     const interval = setInterval(fetchGroups, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialFetch);
+      clearInterval(interval);
+    };
   }, []);
+
+  const handleRegistrationModeChange = async (mode: RegistrationMode) => {
+    if (mode === registrationMode || modeSaving) return;
+
+    const previousMode = registrationMode;
+    setRegistrationMode(mode);
+    setModeSaving(true);
+
+    try {
+      const res = await fetch('/api/admin/registration-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationMode: mode })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Unable to save registration mode.');
+      }
+    } catch (e) {
+      setRegistrationMode(previousMode);
+      setErrorDialog({
+        isOpen: true,
+        message: e instanceof Error ? e.message : 'Unable to save registration mode.'
+      });
+    } finally {
+      setModeSaving(false);
+    }
+  };
+
+  const handleManualAdd = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (participantSaving) return;
+
+    const name = participantName.trim();
+    const studentNumber = participantIdentifier.trim();
+    if (!name) {
+      setErrorDialog({ isOpen: true, message: 'Participant name is required.' });
+      return;
+    }
+
+    setParticipantSaving(true);
+    try {
+      const res = await fetch('/api/admin/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, studentNumber })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Unable to add participant.');
+      }
+
+      setAddParticipantOpen(false);
+      setParticipantName('');
+      setParticipantIdentifier('');
+      await fetchGroups();
+    } catch (error) {
+      setErrorDialog({
+        isOpen: true,
+        message: error instanceof Error ? error.message : 'Unable to add participant.'
+      });
+    } finally {
+      setParticipantSaving(false);
+    }
+  };
 
   const promptDeleteStudent = (id: string) => {
     setConfirmDialog({ 
@@ -133,20 +220,70 @@ export default function AdminDashboard() {
           <h1 className="text-5xl md:text-6xl font-oswald font-bold tracking-tighter uppercase text-[#111] leading-none mb-2">Admin Dashboard</h1>
           <p className="font-comic font-bold text-xl text-neutral-700 italic">Manage Groups & Participants</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <button 
             onClick={handleCreateGroup}
             className="grunge-btn px-6 py-4 flex items-center gap-2 bg-[#111] text-white hover:bg-[#d92323] transition-colors"
           >
             <Plus className="w-6 h-6" />
             <span className="font-oswald text-2xl font-bold uppercase tracking-widest">New Group</span>
-          </button>
-          <div className="grunge-card px-8 py-4 flex items-center gap-4">
+           </button>
+           <button
+             onClick={() => setAddParticipantOpen(true)}
+             className="inline-flex items-center gap-2 px-6 py-4 bg-[#d92323] text-white font-oswald border-[6px] border-[#111] hover:bg-red-700 transition-colors shadow-[8px_8px_0px_rgba(17,17,17,0.2)]"
+           >
+             <UserPlus className="w-6 h-6" />
+             <span className="font-oswald text-2xl font-bold uppercase tracking-widest">Add Participant</span>
+           </button>
+           <a
+             href="/api/admin/export"
+             download="qr-gaap-student-names.json"
+             className="inline-flex items-center gap-2 px-6 py-4 bg-white text-[#111] font-oswald border-[6px] border-[#111] hover:bg-[#d92323] hover:text-white transition-colors shadow-[8px_8px_0px_rgba(217,35,35,0.3)]"
+           >
+             <Download className="w-6 h-6" />
+             <span className="font-oswald text-2xl font-bold uppercase tracking-widest">Export Names</span>
+           </a>
+           <div className="grunge-card px-8 py-4 flex items-center gap-4">
             <Users className="text-[#d92323] w-8 h-8" />
             <span className="font-oswald text-3xl font-bold uppercase tracking-widest text-[#111]">{total} / {totalCapacity || 280} Joined</span>
           </div>
         </div>
       </div>
+
+      <section className="grunge-card mb-8 px-6 py-5 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="flex items-start gap-4">
+          <Settings className="text-[#d92323] w-8 h-8 mt-1" />
+          <div>
+            <h2 className="font-oswald text-3xl font-bold uppercase tracking-widest text-[#111]">Registration Mode</h2>
+            <p className="font-comic font-bold text-neutral-600 text-lg italic">
+              Choose what participants will submit on the registration page.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+          <button
+            onClick={() => handleRegistrationModeChange('nfc')}
+            disabled={modeSaving}
+            className={`px-5 py-3 font-oswald text-xl font-bold uppercase tracking-widest border-4 border-[#111] transition-colors ${registrationMode === 'nfc' ? 'bg-[#d92323] text-white' : 'bg-white text-[#111] hover:bg-neutral-200'} disabled:opacity-50`}
+          >
+            NFC Reader
+          </button>
+          <button
+            onClick={() => handleRegistrationModeChange('studentNumber')}
+            disabled={modeSaving}
+            className={`px-5 py-3 font-oswald text-xl font-bold uppercase tracking-widest border-4 border-[#111] transition-colors ${registrationMode === 'studentNumber' ? 'bg-[#111] text-white' : 'bg-white text-[#111] hover:bg-neutral-200'} disabled:opacity-50`}
+          >
+            Student Number
+          </button>
+          <button
+            onClick={() => handleRegistrationModeChange('manualName')}
+            disabled={modeSaving}
+            className={`px-5 py-3 font-oswald text-xl font-bold uppercase tracking-widest border-4 border-[#111] transition-colors ${registrationMode === 'manualName' ? 'bg-[#d92323] text-white' : 'bg-white text-[#111] hover:bg-neutral-200'} disabled:opacity-50`}
+          >
+            Manual Name Entry
+          </button>
+        </div>
+      </section>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 flex-grow">
         {groups.map((group) => (
@@ -182,7 +319,7 @@ export default function AdminDashboard() {
             </div>
             
             <ul className="space-y-2 h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {group.members.map((m: any, i: number) => (
+              {group.members.map(m => (
                 <li 
                   key={m.id} 
                   draggable={true}
@@ -193,7 +330,7 @@ export default function AdminDashboard() {
                     <GripVertical className="w-4 h-4 text-neutral-400 group-hover:text-white" />
                     <div className="flex flex-col overflow-hidden">
                       <span className="font-comic text-lg font-bold truncate group-hover:text-white">{m.name}</span>
-                      <span className="text-sm text-neutral-500 font-comic font-bold group-hover:text-neutral-300 truncate">{m.studentNumber}</span>
+                      <span className="text-sm text-neutral-500 font-comic font-bold group-hover:text-neutral-300 truncate">{m.studentNumber || 'MANUAL ENTRY'}</span>
                     </div>
                   </div>
                   <button 
@@ -211,6 +348,76 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {addParticipantOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#060010]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <form
+            onSubmit={handleManualAdd}
+            className="bg-[#faf9f6] border-4 border-[#111] shadow-[12px_12px_0px_#111] max-w-lg w-full p-8 flex flex-col relative animate-in zoom-in-95 duration-200"
+          >
+            <div className="flex items-center gap-4 mb-6 pb-4 border-b-4 border-[#111]">
+              <div className="bg-[#d92323] p-3 border-2 border-[#111] shadow-[4px_4px_0px_#111]">
+                <UserPlus className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="font-oswald text-4xl font-bold uppercase tracking-widest text-[#111] leading-none mt-2">
+                Add Participant
+              </h2>
+            </div>
+
+            <label className="font-oswald text-lg uppercase tracking-widest text-[#111] mb-2" htmlFor="participant-name">
+              Full Name
+            </label>
+            <input
+              id="participant-name"
+              autoFocus
+              maxLength={100}
+              required
+              value={participantName}
+              onChange={event => setParticipantName(event.target.value)}
+              placeholder="Juan Dela Cruz"
+              className="grunge-input mb-5"
+              disabled={participantSaving}
+            />
+
+            <label className="font-oswald text-lg uppercase tracking-widest text-[#111] mb-2" htmlFor="participant-identifier">
+              Student Number or Card UID <span className="text-neutral-500">(optional)</span>
+            </label>
+            <input
+              id="participant-identifier"
+              value={participantIdentifier}
+              onChange={event => setParticipantIdentifier(event.target.value)}
+              placeholder="Leave blank for a name-only entry"
+              className="grunge-input"
+              disabled={participantSaving}
+            />
+            <p className="font-comic font-bold text-neutral-600 mt-2 mb-8">
+              This adds the participant directly without a DLSL lookup. They will be assigned to the least-filled group.
+            </p>
+
+            <div className="flex items-center gap-4 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddParticipantOpen(false);
+                  setParticipantName('');
+                  setParticipantIdentifier('');
+                }}
+                disabled={participantSaving}
+                className="font-oswald font-bold text-xl uppercase tracking-widest px-6 py-3 bg-white border-2 border-[#111] text-[#111] hover:bg-neutral-200 transition-colors shadow-[4px_4px_0px_#111] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={participantSaving || !participantName.trim()}
+                className="font-oswald font-bold text-xl uppercase tracking-widest px-6 py-3 bg-[#d92323] border-2 border-[#111] text-white hover:bg-red-700 transition-colors shadow-[4px_4px_0px_#111] disabled:opacity-50"
+              >
+                {participantSaving ? 'Adding...' : 'Add Participant'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* CUSTOM CONFIRMATION DIALOG MODAL */}
       {confirmDialog.isOpen && (

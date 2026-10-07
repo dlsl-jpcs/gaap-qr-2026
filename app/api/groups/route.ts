@@ -11,7 +11,12 @@ export async function GET() {
   }));
   
   return NextResponse.json(
-    { success: true, groups, total: data.students.length },
+    {
+      success: true,
+      groups,
+      total: data.students.length,
+      registrationMode: data.registrationMode,
+    },
     { headers: { 'Cache-Control': 'no-store, max-age=0' } }
   );
 }

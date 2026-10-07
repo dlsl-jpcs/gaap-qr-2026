@@ -40,19 +40,28 @@ export async function fetchStudentInfo(studentId: string) {
     const data = response.data;
 
     // Check if the student is actually registered
-    if (!data.email_address || data.email_address === "") {
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      Array.isArray(data) ||
+      typeof data.email_address !== 'string' ||
+      data.email_address.trim() === ""
+    ) {
       return null;
     }
 
     // Return the extracted student data
     return {
-      email: data.email_address.toLowerCase(),
+      email: data.email_address.trim().toLowerCase(),
       name: data.name || undefined,
       photo: data.photo || undefined,
     };
 
-  } catch (error: any) {
-    console.error('DLSL API request failed:', error.message);
+  } catch (error: unknown) {
+    console.error(
+      'DLSL API request failed:',
+      error instanceof Error ? error.message : String(error)
+    );
     throw error;
   }
 }
