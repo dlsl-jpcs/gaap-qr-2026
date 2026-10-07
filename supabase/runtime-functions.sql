@@ -1,6 +1,10 @@
 -- QR-GAAP runtime functions used by the current registration/admin APIs.
 -- Run this after the base tables from the Supabase setup SQL have been created.
 
+-- Recreate this RPC to repair an older function whose parameter names do not
+-- match the JSON keys sent by the current app.
+drop function if exists public.register_participant(text, text, text);
+
 create or replace function public.register_participant(
   p_name text,
   p_student_number text default null,
@@ -228,3 +232,6 @@ grant execute on function public.delete_participant(uuid) to service_role;
 grant execute on function public.delete_group_with_members(smallint) to service_role;
 grant execute on function public.update_group_capacity(smallint, integer) to service_role;
 grant execute on function public.reset_registration_data() to service_role;
+
+-- Make the RPC definitions available to PostgREST immediately after commit.
+notify pgrst, 'reload schema';

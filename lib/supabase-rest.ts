@@ -62,9 +62,11 @@ export async function supabaseRest<T>(
     const error = payload && typeof payload === 'object'
       ? payload as SupabaseErrorPayload
       : {};
-    const status = error.code === '23505' ? 409 : response.status;
+    const status = error.code === '23505' ? 409 : error.code === 'PGRST202' ? 503 : response.status;
     const message = error.code === '23505'
       ? 'That participant identifier is already registered.'
+      : error.code === 'PGRST202'
+        ? 'Supabase cannot find the registration function. Run supabase/runtime-functions.sql in the Supabase SQL Editor, then retry.'
       : response.status >= 500
         ? 'Supabase could not complete the request. Check the server configuration and database.'
         : error.message || 'Supabase rejected the request.';

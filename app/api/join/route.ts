@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { assignStudent, getRegistrationMode } from '@/lib/db';
 import { fetchStudentInfo, deriveDisplayName } from '@/lib/api';
+import { SupabaseRequestError } from '@/lib/supabase-rest';
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -49,7 +50,12 @@ export async function POST(request: Request) {
     } catch (error) {
       console.error('Manual participant registration failed:', error instanceof Error ? error.message : 'Unknown error');
       return NextResponse.json(
-        { success: false, message: 'Unable to register right now. Please try again.' },
+        {
+          success: false,
+          message: error instanceof SupabaseRequestError && error.code === 'PGRST202'
+            ? error.message
+            : 'Unable to register right now. Please try again.',
+        },
         { status: 503 },
       );
     }
@@ -86,23 +92,9 @@ export async function POST(request: Request) {
     );
   }
 
+  let info: Awaited<ReturnType<typeof fetchStudentInfo>>;
   try {
-    const info = await fetchStudentInfo(formattedStudentNumber);
-
-    if (!info) {
-      return NextResponse.json(
-        { success: false, message: "Student not found in DLSL database." },
-        { status: 404 },
-      );
-    }
-
-    const finalName = info.name || deriveDisplayName(info.email);
-    const result = await assignStudent(
-      finalName,
-      formattedStudentNumber,
-      isNfcMode ? 'cardTag' : 'studentNumber',
-    );
-    return NextResponse.json(result);
+    info = await fetchStudentInfo(formattedStudentNumber);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown lookup error';
     console.error('Student lookup failed:', message);
@@ -112,6 +104,34 @@ export async function POST(request: Request) {
         message: "The DLSL student lookup is temporarily unavailable. Please try again.",
       },
       { status: 502 },
+    );
+  }
+
+  if (!info) {
+    return NextResponse.json(
+      { success: false, message: 'Student not found in DLSL database.' },
+      { status: 404 },
+    );
+  }
+
+  try {
+    const finalName = info.name || deriveDisplayName(info.email);
+    const result = await assignStudent(
+      finalName,
+      formattedStudentNumber,
+      isNfcMode ? 'cardTag' : 'studentNumber',
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error('Unable to save registration:', error instanceof Error ? error.message : 'Unknown error');
+    return NextResponse.json(
+      {
+        success: false,
+        message: error instanceof SupabaseRequestError && error.code === 'PGRST202'
+          ? error.message
+          : 'Unable to register right now. Please try again.',
+      },
+      { status: 503 },
     );
   }
 }
