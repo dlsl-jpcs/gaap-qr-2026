@@ -3,10 +3,11 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const Module = require('node:module');
-const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const typescript = require('typescript');
+const { createGameDb } = require('./helpers/game-db.cjs');
+const { createRestDb } = require('./helpers/rest-db.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -25,6 +26,7 @@ function loadTypeScriptModule(filename, overrides = {}) {
 
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
+    if (request === 'server-only') return {};
     if (Object.hasOwn(overrides, request)) return overrides[request];
     return originalLoad.call(this, request, parent, isMain);
   };
@@ -192,8 +194,8 @@ test('NFC route sends normalized hexadecimal UID to server-side DLSL card_tag', 
 });
 
 test('join route preserves group assignment, modes, lookup errors, and duplicate handling', async t => {
-  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'qr-gaap-join-'));
-  const originalDirectory = process.cwd();
+  const engine = await createGameDb();
+  const rest = createRestDb(engine.db);
   let route;
   let db;
   let lookupCalls = [];
@@ -205,20 +207,16 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
   });
   const dbPath = path.join(projectRoot, 'lib', 'db.ts');
 
-  process.chdir(temporaryDirectory);
   try {
-    fs.writeFileSync(path.join(temporaryDirectory, 'data.json'), JSON.stringify({
-      students: [],
-      groups: [{ id: 1, maxCapacity: 2 }, { id: 2, maxCapacity: 2 }],
-      registrationMode: 'nfc',
-    }));
-
-    db = loadTypeScriptModule(dbPath);
+    await engine.db.exec(fs.readFileSync(path.join(projectRoot, 'supabase', 'runtime-functions.sql'), 'utf8'));
+    await engine.db.exec('delete from public.groups where id > 2; update public.groups set capacity = 2;');
+    db = loadTypeScriptModule(dbPath, { '@/lib/supabase-rest': rest });
     route = loadTypeScriptModule(
       path.join(projectRoot, 'app', 'api', 'join', 'route.ts'),
       {
         'next/server': { NextResponse: { json: responseJson } },
         '@/lib/db': db,
+        '@/lib/supabase-rest': rest,
         '@/lib/api': {
           fetchStudentInfo: async identifier => {
             lookupCalls.push(identifier);
@@ -229,25 +227,15 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
       },
     );
   } catch (error) {
-    process.chdir(originalDirectory);
-    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    await engine.db.close();
     throw error;
   }
 
-  const resetData = registrationMode => {
+  const resetData = async registrationMode => {
     lookupCalls = [];
     lookupImplementation = async () => ({ email: 'test@example.edu', name: 'Test Student' });
-    db.saveDbData({
-      students: [{
-        id: 'seed-student',
-        name: 'Seed Student',
-        studentNumber: 'existing-id',
-        groupId: 1,
-        timestamp: '2026-01-01T00:00:00.000Z',
-      }],
-      groups: [{ id: 1, maxCapacity: 2 }, { id: 2, maxCapacity: 2 }],
-      registrationMode,
-    });
+    await engine.db.exec("delete from public.students; insert into public.students(name, student_number, group_id) values ('Seed Student', 'existing-id', 1);");
+    await engine.db.query('update public.event_settings set registration_mode = $1 where singleton', [registrationMode]);
   };
   const post = payload => route.POST(new Request('http://localhost/api/join', {
     method: 'POST',
@@ -257,7 +245,7 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
 
   try {
     await t.test('new NFC registration goes to the least-filled group', async () => {
-      resetData('nfc');
+      await resetData('nfc');
       const response = await post({ studentNumber: '04A1B2C3' });
       const body = await response.json();
 
@@ -267,10 +255,10 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
     });
 
     await t.test('repeat NFC registration returns the existing participant without inserting again', async () => {
-      resetData('nfc');
+      await resetData('nfc');
       const first = await (await post({ studentNumber: '04A1B2C3' })).json();
       const repeated = await (await post({ studentNumber: '04a1b2c3' })).json();
-      const data = db.getDbData();
+      const data = await db.getDbData();
 
       assert.equal(repeated.success, true);
       assert.equal(repeated.student.id, first.student.id);
@@ -279,7 +267,7 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
     });
 
     await t.test('manual name mode assigns a participant without calling DLSL', async () => {
-      resetData('manualName');
+      await resetData('manualName');
       const response = await post({ name: '  Manual Participant  ' });
       const body = await response.json();
 
@@ -290,7 +278,7 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
     });
 
     await t.test('student number mode keeps numeric DLSL lookup behavior', async () => {
-      resetData('studentNumber');
+      await resetData('studentNumber');
       const response = await post({ studentNumber: '202610101' });
       const body = await response.json();
 
@@ -299,7 +287,7 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
     });
 
     await t.test('DLSL lookup failure returns 502 without adding a participant', async () => {
-      resetData('studentNumber');
+      await resetData('studentNumber');
       lookupImplementation = async () => { throw new Error('simulated DLSL outage'); };
       const originalError = console.error;
       console.error = () => {};
@@ -309,13 +297,12 @@ test('join route preserves group assignment, modes, lookup errors, and duplicate
         const body = await response.json();
         assert.equal(response.status, 502);
         assert.match(body.message, /temporarily unavailable/i);
-        assert.equal(db.getDbData().students.length, 1);
+        assert.equal((await db.getDbData()).students.length, 1);
       } finally {
         console.error = originalError;
       }
     });
   } finally {
-    process.chdir(originalDirectory);
-    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    await engine.db.close();
   }
 });

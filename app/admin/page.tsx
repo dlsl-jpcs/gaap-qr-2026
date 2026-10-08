@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Users, Trash2, Plus, GripVertical, AlertTriangle, Download, Settings, UserPlus, LogOut } from 'lucide-react';
 import type { Student } from '@/lib/db';
+import GamesAdmin from '@/components/games/GamesAdmin';
 
 type RegistrationMode = 'nfc' | 'studentNumber' | 'manualName';
 type AdminGroup = { groupId: number; maxCapacity: number; members: Student[] };
@@ -93,6 +94,7 @@ export default function AdminDashboard() {
 }
 
 function AdminDashboardContent({ onLogout }: { onLogout: () => void }) {
+  const [dashboardSection, setDashboardSection] = useState<'registration' | 'games'>('registration');
   const [groups, setGroups] = useState<AdminGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [totalCapacity, setTotalCapacity] = useState(0);
@@ -346,6 +348,12 @@ function AdminDashboardContent({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
 
+      <nav aria-label="Admin sections" className="mb-8 flex flex-wrap gap-3">
+        <button onClick={() => setDashboardSection('registration')} aria-current={dashboardSection === 'registration' ? 'page' : undefined} className={`px-6 py-3 border-4 border-[#111] font-oswald text-xl font-bold ${dashboardSection === 'registration' ? 'bg-[#111] text-white' : 'bg-[#faf9f6] text-[#111]'}`}>Groups & Participants</button>
+        <button onClick={() => setDashboardSection('games')} aria-current={dashboardSection === 'games' ? 'page' : undefined} className={`px-6 py-3 border-4 border-[#111] font-oswald text-xl font-bold ${dashboardSection === 'games' ? 'bg-[#111] text-white' : 'bg-[#faf9f6] text-[#111]'}`}>Games Management</button>
+      </nav>
+      {dashboardSection === 'games' && <GamesAdmin />}
+      <div hidden={dashboardSection !== 'registration'}>
       <section className="grunge-card mb-8 px-6 py-5 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div className="flex items-start gap-4">
           <Settings className="text-[#d92323] w-8 h-8 mt-1" />
@@ -445,6 +453,7 @@ function AdminDashboardContent({ onLogout }: { onLogout: () => void }) {
         ))}
       </div>
 
+      </div>
       {addParticipantOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#060010]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <form
