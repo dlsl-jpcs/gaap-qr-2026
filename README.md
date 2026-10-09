@@ -74,3 +74,7 @@ npm run build
 The production build uses Next.js's supported Webpack compiler because the installed Windows Turbopack CSS worker failed to start reliably.
 
 For a disposable browser preview, run `npm run preview:games`. Open `http://127.0.0.1:3022/games`; the test admin password is `preview-password-only`, and group codes are `preview-group-1` through `preview-group-14`. This process overrides Supabase settings with a local, temporary PostgreSQL fixture and never writes to the real project. With it running, run `npm run test:games:http` in another terminal for the HTTP integration checks. Stop the preview with Ctrl+C when finished. These test credentials are never installed in the production database.
+
+### NFC UI preview without a reader
+
+Run `npm run preview:nfc` instead of the game preview, then open `http://127.0.0.1:3022/`. Click the NFC field, type `04A1B2C3`, and press Enter. It registers a synthetic student and shows the group inside the same card. Type `04D4E5F6` next to check a second student; omit Enter to check the existing pause ending. `04C0FFEE` demonstrates processing, `04DEAD00` demonstrates a missing student, and `04BADBAD` demonstrates a lookup failure. All lookups and registrations stay in disposable local fixtures. The reader buffering, keyboard handling and submission flow are unchanged; only the NFC result layout is different.

@@ -14,7 +14,8 @@
     "test:games:http": "node --test tests/game-http.integration.cjs",
     "test": "node --test tests/*.test.cjs",
     "typecheck": "tsc --noEmit",
-    "preview:games": "node tests/helpers/preview-game-app.cjs"
+    "preview:games": "node tests/helpers/preview-game-app.cjs",
+    "preview:nfc": "node tests/helpers/preview-game-app.cjs --nfc"
   },
   "dependencies": {
     "axios": "^1.19.0",

@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import { CheckCircle2 } from 'lucide-react';
 import SuccessCard from '@/components/SuccessCard';
+import NfcRegistrationStatus from '@/components/NfcRegistrationStatus';
 import { canCaptureNfcKeyboardInput, NfcKeyboardScanBuffer } from '@/lib/nfc-keyboard-scan';
 
 type RegistrationMode = 'nfc' | 'studentNumber' | 'manualName';
@@ -203,7 +205,7 @@ export default function Home() {
       </div>
 
       <AnimatePresence mode="wait">
-        {!assignedGroup ? (
+        {registrationMode === 'nfc' || !assignedGroup ? (
           <motion.div 
             key="form"
             initial={{ opacity: 0, y: 30, rotate: -2 }}
@@ -229,93 +231,67 @@ export default function Home() {
             
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block font-oswald text-xl uppercase tracking-widest text-[#111] mb-1">
+                <label htmlFor="registration-input" className="block font-oswald text-xl uppercase tracking-widest text-[#111] mb-1">
                   {registrationMode === 'manualName'
                     ? 'Full Name'
                     : registrationMode === 'nfc'
                       ? 'NFC Student Card'
                       : 'Student Number'}
                 </label>
-                <input 
-                  type="text"
-                  inputMode={registrationMode === 'studentNumber' ? 'numeric' : 'text'}
-                  pattern={registrationMode === 'manualName' ? undefined : registrationMode === 'nfc' ? '[A-Fa-f0-9]*' : '[0-9]*'}
-                  autoComplete="off"
-                  className="grunge-input"
-                  placeholder={registrationMode === 'manualName'
-                    ? 'Juan Dela Cruz'
-                    : registrationMode === 'nfc'
-                      ? 'Waiting for card input'
-                      : '202610101'}
-                  value={registrationMode === 'manualName' ? name : studentNumber}
-                  readOnly={registrationMode === 'nfc'}
-                  ref={registrationMode === 'nfc' ? nfcInputRef : undefined}
-                  onKeyDown={registrationMode === 'nfc' ? handleNfcKeyDown : undefined}
-                  onBlur={registrationMode === 'nfc' ? () => {
-                    scanBufferRef.current?.discardPartial();
-                    setStudentNumber('');
-                  } : undefined}
-                  onChange={e => registrationMode === 'manualName'
-                    ? setName(e.target.value)
-                    : setStudentNumber(e.target.value)}
-                  disabled={modeLoading || registrationMode === null || (loading && registrationMode !== 'nfc')}
-                />
+                <div className="relative">
+                  <input
+                    id="registration-input"
+                    type="text"
+                    inputMode={registrationMode === 'studentNumber' ? 'numeric' : 'text'}
+                    pattern={registrationMode === 'manualName' ? undefined : registrationMode === 'nfc' ? '[A-Fa-f0-9]*' : '[0-9]*'}
+                    autoComplete="off"
+                    className={`grunge-input ${registrationMode === 'nfc' ? 'pr-12' : ''}`}
+                    placeholder={registrationMode === 'manualName'
+                      ? 'Juan Dela Cruz'
+                      : registrationMode === 'nfc'
+                        ? (loading || (!error && assignedGroup !== null) ? 'Card read' : 'Waiting for card input')
+                        : '202610101'}
+                    value={registrationMode === 'manualName' ? name : studentNumber}
+                    readOnly={registrationMode === 'nfc'}
+                    aria-describedby={registrationMode === 'nfc' ? 'nfc-registration-status' : undefined}
+                    ref={registrationMode === 'nfc' ? nfcInputRef : undefined}
+                    onKeyDown={registrationMode === 'nfc' ? handleNfcKeyDown : undefined}
+                    onBlur={registrationMode === 'nfc' ? () => {
+                      scanBufferRef.current?.discardPartial();
+                      setStudentNumber('');
+                    } : undefined}
+                    onChange={e => registrationMode === 'manualName'
+                      ? setName(e.target.value)
+                      : setStudentNumber(e.target.value)}
+                    disabled={modeLoading || registrationMode === null || (loading && registrationMode !== 'nfc')}
+                  />
+                  {registrationMode === 'nfc' && !loading && !error && !studentNumber && assignedGroup !== null && (
+                    <CheckCircle2 aria-label="Card read" role="img" className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 text-[#111] pointer-events-none" />
+                  )}
+                  </div>
               </div>
               
-              {error && (
+              {error && registrationMode !== 'nfc' && (
                 <div className="text-[#d92323] font-oswald text-xl tracking-wider uppercase text-center mt-4">
                   {error}
                 </div>
               )}
               
-              <button 
-                type="submit" 
-                disabled={loading || modeLoading || registrationMode === null || registrationMode === 'nfc'}
-                className="grunge-btn"
-              >
-                {modeLoading
-                  ? 'LOADING...'
-                : loading
-                    ? 'PROCESSING...'
-                    : registrationMode === 'nfc'
-                      ? 'WAITING FOR CARD INPUT'
-                      : 'JOIN EVENT'}
-              </button>
+              {registrationMode === 'nfc' ? (
+                <NfcRegistrationStatus modeLoading={modeLoading} loading={loading} error={error} groupNumber={assignedGroup} />
+              ) : (
+                <button
+                  type="submit"
+                  disabled={loading || modeLoading || registrationMode === null}
+                  className="grunge-btn"
+                >
+                  {modeLoading ? 'LOADING...' : loading ? 'PROCESSING...' : 'JOIN EVENT'}
+                </button>
+              )}
             </form>
           </motion.div>
         ) : (
-          <>
-            <SuccessCard key="success" groupNumber={assignedGroup} />
-            {registrationMode === 'nfc' && (
-              <div className="w-full max-w-md grunge-card p-5 text-center z-10">
-                <label htmlFor="nfc-next-card" className="block font-oswald text-lg uppercase tracking-widest text-[#111] mb-2">
-                  Next student card
-                </label>
-                <input
-                  id="nfc-next-card"
-                  ref={nfcInputRef}
-                  type="text"
-                  value={studentNumber}
-                  readOnly
-                  placeholder="Waiting for card input"
-                  className="grunge-input"
-                  onKeyDown={handleNfcKeyDown}
-                  onBlur={() => {
-                    scanBufferRef.current?.discardPartial();
-                    setStudentNumber('');
-                  }}
-                />
-                <p className="mt-2 font-oswald text-sm uppercase tracking-wider text-neutral-600">
-                  Waiting for card input — keep this page focused.
-                </p>
-                {error && (
-                  <p className="mt-3 text-[#d92323] font-oswald text-sm tracking-wider uppercase">
-                    {error}
-                  </p>
-                )}
-              </div>
-            )}
-          </>
+          <SuccessCard key="success" groupNumber={assignedGroup} />
         )}
       </AnimatePresence>
     </main>
