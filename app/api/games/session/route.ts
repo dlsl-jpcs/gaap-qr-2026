@@ -13,9 +13,9 @@ export async function POST(request: Request) {
     requireSameOrigin(request);
     const body = await readGameBody(request);
     const groupId = body.groupId;
-    if (typeof groupId !== 'number' || !Number.isInteger(groupId) || groupId < 1 || typeof body.code !== 'string' || !body.code.trim()) throw new GameRequestError('Choose a group and enter its facilitator code.');
+    if (typeof groupId !== 'number' || !Number.isInteger(groupId) || groupId < 1 || typeof body.code !== 'string' || !body.code.trim()) throw new GameRequestError('Choose a group and enter the facilitator PIN.');
     const version = await verifyFacilitatorCode(groupId, body.code);
-    if (!version) throw new GameRequestError('The facilitator code does not match this group.', 401);
+    if (!version) throw new GameRequestError('That PIN is incorrect, or the admin has not set one yet.', 401);
     const token = createFacilitatorToken(groupId, version);
     const response = NextResponse.json({ success: true, groupId });
     response.cookies.set(FACILITATOR_COOKIE, token.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: token.maxAge });

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAdminSessionValid } from '@/lib/admin-session';
-import { createGroupAccessCode, hashAccessCode } from '@/lib/games/session';
+import { createGroupAccessCode, hashAccessCode, setFacilitatorPin } from '@/lib/games/session';
 import { validateAdminPayload } from '@/lib/games/admin-validation';
 import { GameRequestError, gameError, gameResponse, gameRpc, gameSnapshot, readGameBody, requireSameOrigin, requireUuid } from '@/lib/games/server';
 export const runtime = 'nodejs';
@@ -17,6 +17,12 @@ export async function POST(request: Request) {
     requireSameOrigin(request);
     if (!isAdminSessionValid(request)) throw new GameRequestError('Admin access required.', 401);
     const body = await readGameBody(request);
+    if (body.action === 'facilitator_pin') {
+      const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
+      if (pin.length < 4 || pin.length > 64) throw new GameRequestError('The facilitator PIN must be 4–64 characters.');
+      await setFacilitatorPin(pin);
+      return NextResponse.json({ success: true }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     if (body.game !== 'maze' && body.game !== 'charades') throw new GameRequestError('Game not found.', 404);
     if (typeof body.action !== 'string' || !actions.includes(body.action)) throw new GameRequestError('Invalid game action.');
     const requestId = requireUuid(body.requestId, 'request ID');

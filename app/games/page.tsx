@@ -117,12 +117,12 @@ export default function GamesPage() {
     {!selectedGame && snapshot && <p className={styles.empty}>{snapshot.games.some(game => game.state !== 'inactive') ? 'Choose a game to continue.' : 'Waiting for the admin to prepare a game.'}</p>}
     {selectedGame && !controlledGroup && <section className={styles.frame}>
       <h2 className={styles.sectionTitle}>Choose your group</h2>
-      <p className={styles.muted}>Enter the facilitator code provided by the admin for this group.</p>
+      <p className={styles.muted}>Enter the facilitator PIN provided by the admin.</p>
       <form className={styles.form} onSubmit={login}>
         <label>Group<select className={styles.input} value={groupId} onChange={event => setGroupId(event.target.value)} required disabled={busy}>
           <option value="">Select a group</option>{snapshot?.groups.map(group => <option key={group.groupId} value={group.groupId}>{group.name}</option>)}
         </select></label>
-        <label>Facilitator code<input className={styles.input} type="password" autoComplete="current-password" value={code} onChange={event => setCode(event.target.value)} maxLength={128} required disabled={busy} /></label>
+        <label>Facilitator PIN<input className={styles.input} type="password" autoComplete="current-password" value={code} onChange={event => setCode(event.target.value)} maxLength={128} required disabled={busy} /></label>
         <button className={styles.button} disabled={busy || !snapshot?.groups.length}>{busy ? 'Opening group…' : 'Continue'}</button>
       </form>
       {snapshot?.groups.length === 0 && <p className={styles.notice}>No groups are available. Ask the admin to create them.</p>}

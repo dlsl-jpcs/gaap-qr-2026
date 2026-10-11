@@ -43,11 +43,40 @@ export async function requireFacilitator(request: Request) {
   const rows = await supabaseRest<{ credential_version: string }[]>(`facilitator_credentials?${supabaseQuery({ group_id: 'eq.' + session.groupId, select: 'credential_version', limit: '1' })}`);
   return rows[0]?.credential_version === session.credentialVersion ? session : null;
 }
+type CredentialRow = { group_id: number; access_code_hash: string; credential_version: string };
+const CREDENTIALS = 'facilitator_credentials';
+const matches = (code: string, stored: string) =>
+  /^[0-9a-f]{64}$/.test(stored) && timingSafeEqual(Buffer.from(hashAccessCode(code), 'hex'), Buffer.from(stored, 'hex'));
+
+/** One universal PIN: the same hash and version are stored for every group, so the
+ *  database still checks a facilitator's group credential on each action. */
+export async function setFacilitatorPin(pin: string) {
+  const groups = await supabaseRest<{ id: number }[]>(`groups?${supabaseQuery({ select: 'id' })}`);
+  if (!groups.length) throw new Error('No groups exist.');
+  const hash = hashAccessCode(pin);
+  const version = randomUUID();
+  const now = new Date().toISOString();
+  await supabaseRest(`${CREDENTIALS}?${supabaseQuery({ on_conflict: 'group_id' })}`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(groups.map(group => ({ group_id: group.id, access_code_hash: hash, credential_version: version, updated_at: now }))),
+  });
+  try {
+    await supabaseRest('audit_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ action: 'gaap.facilitator_pin_set', entity: 'facilitator_credentials', actor_label: 'admin', after_data: { groups: groups.length } }) });
+  } catch { /* The audit entry is best effort; the PIN itself is already saved. */ }
+}
 export async function verifyFacilitatorCode(groupId: number, code: string) {
   if (!code || code.length > 128 || !Number.isInteger(groupId) || groupId < 1) return null;
-  const rows = await supabaseRest<{ access_code_hash: string; credential_version: string }[]>(`facilitator_credentials?${supabaseQuery({ group_id: 'eq.' + groupId, select: 'access_code_hash,credential_version', limit: '1' })}`);
-  const stored = rows[0];
-  if (!stored || !/^[0-9a-f]{64}$/.test(stored.access_code_hash)) return null;
-  const actual = Buffer.from(hashAccessCode(code), 'hex');
-  return timingSafeEqual(actual, Buffer.from(stored.access_code_hash, 'hex')) ? stored.credential_version : null;
+  const own = await supabaseRest<CredentialRow[]>(`${CREDENTIALS}?${supabaseQuery({ group_id: 'eq.' + groupId, select: 'group_id,access_code_hash,credential_version', limit: '1' })}`);
+  if (own[0]) return matches(code, own[0].access_code_hash) ? own[0].credential_version : null;
+  // A group created after the PIN was set has no row yet: accept the shared PIN and add it.
+  const shared = await supabaseRest<CredentialRow[]>(`${CREDENTIALS}?${supabaseQuery({ select: 'group_id,access_code_hash,credential_version', order: 'updated_at.desc', limit: '1' })}`);
+  const stored = shared[0];
+  if (!stored || !matches(code, stored.access_code_hash)) return null;
+  await supabaseRest(`${CREDENTIALS}?${supabaseQuery({ on_conflict: 'group_id' })}`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: JSON.stringify({ group_id: groupId, access_code_hash: stored.access_code_hash, credential_version: stored.credential_version }),
+  });
+  return stored.credential_version;
 }

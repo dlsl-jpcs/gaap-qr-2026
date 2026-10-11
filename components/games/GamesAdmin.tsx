@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { postGameAction, useGameFeed, useServerClock } from '@/lib/games/use-game-feed';
 import { formatGameTime, gameTimeMs, ordinal } from '@/lib/games/timers';
 import { STATE_LABELS, type CharadesAttempt, type Game, type GameType } from '@/lib/games/types';
@@ -27,8 +27,7 @@ export default function GamesAdmin() {
   const [wordDraft, updateWordDraft] = useState<string[] | null>(null);
   const draftVersions = useRef<{ maze?: string; charades?: string; words?: string }>({});
   const [bulk, setBulk] = useState('');
-  const [codeGroup, setCodeGroup] = useState('');
-  const [issuedCode, setIssuedCode] = useState<{ groupId: number; code: string } | null>(null);
+  const [pin, setPin] = useState('');
   const [reviewGroup, setReviewGroup] = useState('');
   const [history, setHistory] = useState<History | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -69,8 +68,7 @@ export default function GamesAdmin() {
     const key = JSON.stringify({ game, action, payload });
     if (retry.current?.key !== key) retry.current = { key, id: crypto.randomUUID() };
     try {
-      const result = await postGameAction('/api/admin/games', { game, action, payload, requestId: retry.current.id });
-      if (result.code) setIssuedCode({ groupId: result.groupId, code: result.code });
+      await postGameAction('/api/admin/games', { game, action, payload, requestId: retry.current.id });
       retry.current = null; setNotice(message);
       await feed.refresh();
       return true;
@@ -115,11 +113,17 @@ export default function GamesAdmin() {
   const reorder = (index: number, direction: 1 | -1) => {
     const next = [...words]; [next[index], next[index + direction]] = [next[index + direction], next[index]]; setWordDraft(next);
   };
-  const issueCode = () => {
-    const groupId = Number(codeGroup);
-    if (!groupId) return;
-    if (admin?.facilitators.some(credential => credential.groupId === groupId)) ask({ game: 'maze', action: 'group_code', payload: { groupId }, title: 'Replace facilitator code?', message: 'Existing facilitator sessions for this group will lose access. Share the new code with the assigned facilitator.', label: 'Replace Code' });
-    else void mutate('maze', 'group_code', { groupId }, 'Facilitator code created. Share it privately with this group’s facilitator.');
+  const savePin = async () => {
+    const value = pin.trim();
+    if (value.length < 4 || value.length > 64) { setError('The facilitator PIN must be 4–64 characters.'); return; }
+    if (mutationLock.current || feed.status !== 'live') return;
+    mutationLock.current = true; setBusy(true); setError(''); setNotice('');
+    try {
+      await postGameAction('/api/admin/games', { action: 'facilitator_pin', pin: value });
+      setPin(''); setNotice('Facilitator PIN saved. Facilitators signed in with an older PIN must enter the new one.');
+      await feed.refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to save the PIN.'); }
+    finally { mutationLock.current = false; setBusy(false); }
   };
 
   return <div className={styles.admin}>
@@ -157,13 +161,12 @@ export default function GamesAdmin() {
 
       <div className={styles.columns}>
         <section className={styles.frame}><h3 className={styles.sectionTitle}>Facilitator Access</h3>
-          <p className={styles.muted}>Each code controls one group. A facilitator enters it on /games.</p>
-          <div className={styles.form}><label>Group<select className={styles.input} value={codeGroup} onChange={event => setCodeGroup(event.target.value)} disabled={disabled}><option value="">Select a group</option>{snapshot.groups.map(group => <option key={group.groupId} value={group.groupId}>{group.name}{admin.facilitators.some(item => item.groupId === group.groupId) ? ' — code issued' : ''}</option>)}</select></label>
-            <button className={styles.button} disabled={disabled || !codeGroup} onClick={issueCode}>{admin.facilitators.some(item => item.groupId === Number(codeGroup)) ? 'Replace Facilitator Code…' : 'Create Facilitator Code'}</button>
-          </div>
-          {issuedCode && <div><p className={styles.notice}>{snapshot.groups.find(group => group.groupId === issuedCode.groupId)?.name} facilitator code</p><code className={styles.code}>{issuedCode.code}</code>
-            <button className={`${styles.button} ${styles.secondary}`} onClick={() => void navigator.clipboard.writeText(issuedCode.code).then(() => setNotice('Code copied.')).catch(() => setError('Select and copy the code above.'))}><Copy className="inline w-5 h-5 mr-2" />Copy Code</button>
-            <p className={styles.muted}>The code is shown here once. Keep it private. Replace it if you lose it.</p></div>}
+          <p className={styles.muted}>One PIN for every group. Facilitators choose their group and enter this PIN on /games. Saving a new PIN signs out facilitators who used the old one.</p>
+          <p className={styles.notice}>{admin.facilitators.length ? 'A facilitator PIN is set.' : 'No facilitator PIN is set yet. Facilitators cannot sign in until you set one.'}</p>
+          <form className={styles.form} onSubmit={event => { event.preventDefault(); void savePin(); }}>
+            <label>{admin.facilitators.length ? 'New facilitator PIN' : 'Facilitator PIN'}<input className={styles.input} type="text" autoComplete="off" value={pin} onChange={event => setPin(event.target.value)} minLength={4} maxLength={64} required disabled={disabled} /></label>
+            <button className={styles.button} disabled={disabled || pin.trim().length < 4}>{admin.facilitators.length ? 'Replace PIN' : 'Set PIN'}</button>
+          </form>
         </section>
         <section className={styles.frame}><h3 className={styles.sectionTitle}>Score Adjustment</h3>
           <form className={styles.form} onSubmit={event => { event.preventDefault(); const game = snapshot.games.find(item => item.type === adjustment.game); if (!game?.currentRound) { setError('Start a round before adding an adjustment.'); return; } ask({ game: adjustment.game, action: 'adjust', payload: { roundId: game.currentRound.id, groupId: Number(adjustment.group), amount: adjustment.amount, reason: adjustment.reason.trim() }, title: 'Apply score adjustment?', message: `${adjustment.amount >= 0 ? '+' : ''}${adjustment.amount} points for ${snapshot.groups.find(group => group.groupId === Number(adjustment.group))?.name}. Reason: ${adjustment.reason}`, label: 'Apply Adjustment' }); }}>
