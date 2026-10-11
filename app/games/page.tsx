@@ -35,6 +35,10 @@ export default function GamesPage() {
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+  useEffect(() => {
+    if (!deactivatedGame) return;
+    try { sessionStorage.removeItem('qr_gaap_selected_game'); } catch {}
+  }, [deactivatedGame]);
   const chooseGame = (type: GameType) => {
     setSelectedGame(type); setError(''); setNotice(''); setDeactivatedGame('');
     try { sessionStorage.setItem('qr_gaap_selected_game', type); } catch {}
