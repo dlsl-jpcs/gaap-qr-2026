@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { podiumClass } from '@/lib/games/ranking';
 import styles from './game.module.css';
 export default function Leaderboard({ rows, compact = false }: { rows: ScoreRow[]; compact?: boolean }) {
-  const gameColumns = Object.keys(rows[0]?.gameScores || { maze: 0, charades: 0 });
+  const gameColumns = Object.keys(rows.find(row => row.gameScores)?.gameScores || { maze: 0, charades: 0 });
   const labels: Record<string, string> = { maze: 'Maze', charades: 'Charades' };
   return <div className={`${styles.leaderboard} ${compact ? styles.compact : ''}`} style={{ '--score-columns': gameColumns.length + 1 } as CSSProperties}>
     <table>
@@ -14,8 +14,8 @@ export default function Leaderboard({ rows, compact = false }: { rows: ScoreRow[
         return <tr key={row.groupId} className={styles[podiumClass(rank)] || undefined}>
           <td className={styles.rankCell}><span aria-label={`Rank ${rank}`} className={styles.rank}>{String(rank).padStart(2, '0')}</span></td>
           <th scope="row" className={styles.groupName}>{row.name}</th>
-          {gameColumns.map(type => <td key={type} data-label={labels[type] || type}>{row.gameScores[type] ?? 0}</td>)}
-          <td data-label="Total" className={styles.total}>{row.totalScore}</td>
+          {gameColumns.map(type => <td key={type} data-label={labels[type] || type}>{row.gameScores?.[type] ?? 0}</td>)}
+          <td data-label="Total" className={styles.total}>{row.totalScore ?? 0}</td>
         </tr>;
       })}</tbody>
     </table>
