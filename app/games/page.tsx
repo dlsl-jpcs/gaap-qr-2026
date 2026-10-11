@@ -24,6 +24,7 @@ export default function GamesPage() {
   const [noticeRound, setNoticeRound] = useState<string | undefined>();
   const [changingGroup, setChangingGroup] = useState(false);
   const [confirmedAction, setConfirmedAction] = useState('');
+  const [deactivatedGame, setDeactivatedGame] = useState('');
   const request = useRef<{ key: string; id: string } | null>(null);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -35,10 +36,20 @@ export default function GamesPage() {
     return () => cancelAnimationFrame(frame);
   }, []);
   const chooseGame = (type: GameType) => {
-    setSelectedGame(type); setError(''); setNotice('');
+    setSelectedGame(type); setError(''); setNotice(''); setDeactivatedGame('');
     try { sessionStorage.setItem('qr_gaap_selected_game', type); } catch {}
   };
   const currentGame = snapshot?.games.find(game => game.type === selectedGame);
+  // When the admin deactivates the selected game, leave it and tell the facilitator why.
+  if (selectedGame && currentGame?.state === 'inactive') {
+    setDeactivatedGame(currentGame.name);
+    setSelectedGame(null);
+    setNotice('');
+    setError('');
+    setCode('');
+    setGroupId('');
+    setConfirmedAction('');
+  }
   const controlledGroup = snapshot?.groups.find(group => group.groupId === privateFeed.snapshot?.facilitator?.groupId);
   const word = privateFeed.snapshot?.facilitator?.currentWord;
   const time = currentGame ? gameTimeMs(currentGame, serverNow) : 0;
@@ -98,6 +109,7 @@ export default function GamesPage() {
         <strong>{game.name}</strong><span className={styles.status} data-state={game.state}>{STATE_LABELS[game.state]}</span>
       </button>)}
     </div>
+    {deactivatedGame && !selectedGame && <p className={styles.notice} role="alert"><strong>{deactivatedGame} was deactivated by the admin.</strong> Scoring has stopped. Wait for the admin to prepare a game again, then choose it to continue.</p>}
     {!selectedGame && snapshot && <p className={styles.empty}>{snapshot.games.some(game => game.state !== 'inactive') ? 'Choose a game to continue.' : 'Waiting for the admin to prepare a game.'}</p>}
     {selectedGame && !controlledGroup && <section className={styles.frame}>
       <h2 className={styles.sectionTitle}>Choose your group</h2>
