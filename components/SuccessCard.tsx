@@ -25,9 +25,6 @@ export default function SuccessCard({ groupNumber }: { groupNumber: number }) {
         <span className="text-[#d92323] text-9xl">{groupNumber}</span>
       </div>
       
-      <p className="mt-8 font-oswald text-xl uppercase tracking-widest text-neutral-700 border-t-[6px] border-[#111] pt-6">
-        Please find your group and await instructions.
-      </p>
     </motion.div>
   );
 }
