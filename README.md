@@ -53,7 +53,7 @@ From `/admin`, select **Export Names** to download `qr-gaap-student-names.json` 
 
 ## Games and live scoring
 
-1. After the registration setup above, open [the game migration](supabase/migrations/202610080001_game_management.sql), copy **the entire file**, and run it once in the Supabase SQL Editor. It extends the existing game tables without replacing participant data. No new production environment variables are needed.
+1. After the registration setup above, open [the game migration](supabase/migrations/202610080001_game_management.sql), copy **the entire file**, and run it once in the Supabase SQL Editor. It extends the existing game tables without replacing participant data. No new production environment variables are needed. Then run [the snapshot lock fix](supabase/migrations/202610130001_snapshot_lock_fast_path.sql) the same way; it only replaces one function so open scoreboards no longer wait on each other.
 2. Open `/admin` and select **Games Management**. Configure Maze placement points and the Charades duration/word deck.
 3. Create a facilitator code for each group and share that code privately with its facilitator.
 4. Facilitators open `/games`, choose a game and their group, and enter the group's code.

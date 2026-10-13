@@ -10,6 +10,7 @@ async function createGameDb() {
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
   await db.exec(fs.readFileSync(path.resolve(__dirname, '../../supabase/schema.sql'), 'utf8'));
   await db.exec(migration);
+  await db.exec(fs.readFileSync(path.resolve(__dirname, '../../supabase/migrations/202610130001_snapshot_lock_fast_path.sql'), 'utf8'));
   const versions = new Map();
   for (let groupId = 1; groupId <= 14; groupId++) {
     const version = randomUUID(); versions.set(groupId, version);

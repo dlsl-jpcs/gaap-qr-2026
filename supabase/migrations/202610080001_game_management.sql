@@ -137,6 +137,10 @@ create or replace function public.gaap_expire_games()
 returns void language plpgsql security invoker set search_path = '' as $$
 declare r record; deadline timestamptz;
 begin
+  -- Snapshots call this on every poll. Take the game lock only when a round is
+  -- actually due, so concurrent readers do not queue behind each other or writers.
+  if not exists (select 1 from public.games g join public.game_rounds gr on gr.id = g.current_round_id
+    where g.game_type = 'charades' and g.state = 'running' and gr.deadline_at <= clock_timestamp()) then return; end if;
   perform pg_advisory_xact_lock(505152, 2);
   for r in select gr.id, gr.deadline_at, g.id game_id from public.game_rounds gr join public.games g on g.current_round_id = gr.id
     where g.game_type = 'charades' and g.state = 'running' and gr.deadline_at <= clock_timestamp() loop

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbData } from '@/lib/db';
+import { sharedCacheHeaders } from '@/lib/cdn-cache';
 
 export async function GET() {
   try {
@@ -25,7 +26,7 @@ export async function GET() {
         total: data.students.length,
         registrationMode: data.registrationMode,
       },
-      { headers: { 'Cache-Control': 'no-store, max-age=0' } },
+      { headers: sharedCacheHeaders(2) },
     );
   } catch (error) {
     console.error('Unable to load QR-GAAP groups:', error instanceof Error ? error.message : 'Unknown error');

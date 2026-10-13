@@ -53,10 +53,11 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     let firstLoad = true;
+    let timer: ReturnType<typeof setTimeout>;
 
     const loadRegistrationMode = async () => {
       try {
-        const res = await fetch('/api/groups', { cache: 'no-store' });
+        const res = await fetch('/api/registration-mode', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
         const data = await res.json();
         if (!res.ok || !data.success) {
           throw new Error('Unable to load registration settings.');
@@ -72,14 +73,15 @@ export default function Home() {
       } finally {
         if (active && firstLoad) setModeLoading(false);
         firstLoad = false;
+        // Wait for each check to finish so slow responses never pile up.
+        if (active) timer = setTimeout(loadRegistrationMode, 5000);
       }
     };
 
     void loadRegistrationMode();
-    const interval = setInterval(loadRegistrationMode, 2000);
     return () => {
       active = false;
-      clearInterval(interval);
+      clearTimeout(timer);
     };
   }, []);
 

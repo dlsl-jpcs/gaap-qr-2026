@@ -4,7 +4,7 @@ import type { GameSnapshot } from './types';
 import { clockOffset } from './timers';
 
 type Feed = { source: string; snapshot: GameSnapshot | null; status: 'loading' | 'live' | 'offline'; error: string; unauthorized: boolean; offset: number };
-export function useGameFeed(endpoint: string, enabled = true) {
+export function useGameFeed(endpoint: string, enabled = true, intervalMs = 2000) {
   const [feed, setFeed] = useState<Feed>({ source: endpoint, snapshot: null, status: 'loading', error: '', unauthorized: false, offset: 0 });
   const refreshRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
@@ -29,7 +29,7 @@ export function useGameFeed(endpoint: string, enabled = true) {
         if (active) setFeed(current => ({ ...current, source: endpoint, snapshot: unauthorized ? null : current.source === endpoint ? current.snapshot : null, status: 'offline', unauthorized, error: error instanceof Error && error.name !== 'AbortError' ? error.message : 'Connection lost. Reconnecting…' }));
       } finally {
         clearTimeout(timeout);
-        if (active && !unauthorized) timer = setTimeout(refresh, 2000);
+        if (active && !unauthorized) timer = setTimeout(refresh, intervalMs);
       }
     };
     const refresh = () => {
@@ -45,7 +45,7 @@ export function useGameFeed(endpoint: string, enabled = true) {
     window.addEventListener('focus', resync);
     document.addEventListener('visibilitychange', resync);
     return () => { active = false; clearTimeout(timer); controller?.abort(); window.removeEventListener('online', resync); window.removeEventListener('focus', resync); document.removeEventListener('visibilitychange', resync); };
-  }, [endpoint, enabled]);
+  }, [endpoint, enabled, intervalMs]);
   const refresh = useCallback(() => refreshRef.current(), []);
   const snapshot = enabled && feed.source === endpoint ? feed.snapshot : null;
   return { ...feed, snapshot, refresh };

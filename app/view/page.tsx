@@ -43,7 +43,7 @@ export default function ViewScreen() {
         if (active) setFeed(current => ({ ...current, status: 'offline' }));
       } finally {
         clearTimeout(timeout);
-        if (active) timer = setTimeout(refresh, 2000);
+        if (active) timer = setTimeout(refresh, 5000);
       }
     };
     void refresh();
