@@ -103,8 +103,6 @@ set search_path = ''
 as $$
 declare
   participant public.students%rowtype;
-  target_capacity integer;
-  target_count integer;
 begin
   perform pg_advisory_xact_lock(505152, 1);
 
@@ -113,10 +111,7 @@ begin
     return jsonb_build_object('success', false, 'message', 'Student not found.');
   end if;
 
-  select capacity into target_capacity
-  from public.groups
-  where id = p_new_group_id;
-  if not found then
+  if not exists (select 1 from public.groups where id = p_new_group_id) then
     return jsonb_build_object('success', false, 'message', 'Target group not found.');
   end if;
 
@@ -124,14 +119,7 @@ begin
     return jsonb_build_object('success', true);
   end if;
 
-  select count(*)::integer into target_count
-  from public.students
-  where group_id = p_new_group_id;
-
-  if target_count >= target_capacity then
-    return jsonb_build_object('success', false, 'message', 'Target group is already at full capacity.');
-  end if;
-
+  -- Admin moves deliberately ignore group capacity; only self-registration is capped.
   update public.students set group_id = p_new_group_id where id = p_student_id;
   return jsonb_build_object('success', true);
 end;
